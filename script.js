@@ -1130,7 +1130,7 @@ function initMobileCue() {
       if (!hasSeenTecnologiaAvanzada) {
         showCue();
       }
-    }, 3000);
+    }, 10000);
   }
 
   // Event listeners for user interaction
@@ -1175,5 +1175,40 @@ function initMobileCue() {
 // Initialize mobile cue when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   initMobileCue();
+  initSponsorsCarousel();
 });
+
+// ===== SPONSORS CAROUSEL FUNCTIONALITY =====
+function initSponsorsCarousel() {
+  const sponsorsTrack = document.getElementById('sponsorsTrack');
+  if (!sponsorsTrack) return;
+
+  let currentIndex = 0;
+  const logos = sponsorsTrack.querySelectorAll('.sponsor-logo');
+  const totalLogos = logos.length;
+  const logoWidth = 120; // Width of each logo
+  const gap = 60; // Gap between logos
+  const moveDistance = logoWidth + gap;
+
+  function moveToNext() {
+    currentIndex = (currentIndex + 1) % (totalLogos / 2); // Only move through the first set of logos
+    const translateX = -currentIndex * moveDistance;
+    sponsorsTrack.style.transform = `translateX(${translateX}px)`;
+  }
+
+  // Move every 5 seconds
+  setInterval(moveToNext, 5000);
+
+  // Reset position when animation completes to create seamless loop
+  sponsorsTrack.addEventListener('transitionend', () => {
+    if (currentIndex >= totalLogos / 2) {
+      currentIndex = 0;
+      sponsorsTrack.style.transition = 'none';
+      sponsorsTrack.style.transform = 'translateX(0)';
+      setTimeout(() => {
+        sponsorsTrack.style.transition = 'transform 0.5s ease-in-out';
+      }, 10);
+    }
+  });
+}
 
