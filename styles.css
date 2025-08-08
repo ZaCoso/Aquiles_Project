@@ -2220,6 +2220,7 @@ img {
 
 /* Exoskeleton Showcase Section - Nueva versión interactiva */
 .exo-showcase {
+  padding: 0px 0;
   position: relative;
   overflow: hidden;
   background-color: rgba(16, 32, 48, 0.8);
