@@ -1054,3 +1054,126 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('resize', handleResponsiveChange);
 });
 
+// ===== MOBILE VISUAL CUE SYSTEM =====
+function initMobileCue() {
+  const mobileCue = document.getElementById('mobileCue');
+  if (!mobileCue) return;
+
+  let inactivityTimer;
+  let secondTimer;
+  let isCueVisible = false;
+  let hasInteracted = false;
+  let hasSeenTecnologiaAvanzada = false;
+
+  // Function to check if user has seen "Tecnología Avanzada" section
+  function checkIfSeenTecnologiaAvanzada() {
+    const exoModel = document.querySelector('.exo-model');
+    if (exoModel) {
+      const rect = exoModel.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      
+      // Check if the exo-model is visible in the viewport
+      if (rect.top < windowHeight && rect.bottom > 0) {
+        hasSeenTecnologiaAvanzada = true;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Function to show the cue
+  function showCue() {
+    if (!isCueVisible && !hasInteracted) {
+      mobileCue.classList.add('show');
+      isCueVisible = true;
+    }
+  }
+
+  // Function to hide the cue
+  function hideCue() {
+    if (isCueVisible) {
+      mobileCue.classList.remove('show');
+      isCueVisible = false;
+    }
+  }
+
+  // Function to reset inactivity timer
+  function resetInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    clearTimeout(secondTimer);
+    
+    // Hide cue if it's visible
+    hideCue();
+    
+    // Check if user has seen the exo-model after interaction
+    checkIfSeenTecnologiaAvanzada();
+    
+    // Set new timer for 5 seconds
+    inactivityTimer = setTimeout(() => {
+      if (!hasInteracted) {
+        showCue();
+        // Start second timer after first cue shows
+        startSecondTimer();
+      }
+    }, 5000);
+  }
+
+  // Function to start second timer
+  function startSecondTimer() {
+    // Clear any existing second timer
+    clearTimeout(secondTimer);
+    
+    // Start 3-second timer
+    secondTimer = setTimeout(() => {
+      // Check if user has seen the exo-model
+      checkIfSeenTecnologiaAvanzada();
+      if (!hasSeenTecnologiaAvanzada) {
+        showCue();
+      }
+    }, 3000);
+  }
+
+  // Event listeners for user interaction
+  const interactionEvents = [
+    'touchstart',
+    'touchmove', 
+    'touchend',
+    'scroll',
+    'click',
+    'mousemove'
+  ];
+
+  interactionEvents.forEach(event => {
+    document.addEventListener(event, resetInactivityTimer, { passive: true });
+  });
+
+  // Start the initial timer
+  inactivityTimer = setTimeout(() => {
+    if (!hasInteracted) {
+      showCue();
+      // Start second timer after first cue shows
+      startSecondTimer();
+    }
+  }, 5000);
+
+  // Monitor scroll to check if user has seen "Tecnología Avanzada"
+  let lastScrollTop = 0;
+  window.addEventListener('scroll', () => {
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    
+    // Check if user has seen the section
+    checkIfSeenTecnologiaAvanzada();
+    
+    if (scrollTop > lastScrollTop + 100) { // Scrolled down more than 100px
+      hideCue();
+      hasInteracted = true;
+    }
+    lastScrollTop = scrollTop;
+  }, { passive: true });
+}
+
+// Initialize mobile cue when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  initMobileCue();
+});
+

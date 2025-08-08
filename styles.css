@@ -4221,23 +4221,110 @@ img {
   -ms-user-select: none;
 }
 
+/* ===== THE VISUAL CUE SYSTEM ===== */
+.mobile-cue {
+  position: fixed;
+  top: 85%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
 
+.mobile-cue.show {
+  opacity: 1;
+}
+
+.mobile-cue-arrow {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, var(--color-light-teal), var(--color-medium-teal));
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(140, 203, 213, 0.6);
+  animation: cuePulse 2s ease-in-out infinite;
+}
+
+.mobile-cue-arrow i {
+  color: var(--color-white);
+  font-size: 24px;
+  animation: cueBounce 1.5s ease-in-out infinite;
+}
+
+.mobile-cue-text {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--color-white);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(140, 203, 213, 0.3);
+}
+
+.mobile-cue-text::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid rgba(0, 0, 0, 0.8);
+}
+
+@keyframes cuePulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(140, 203, 213, 0.6);
+  }
+  50% {
+    transform: scale(1.1);
+    box-shadow: 0 0 30px rgba(140, 203, 213, 0.8);
+  }
+}
+
+@keyframes cueBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* Hide cue on desktop */
+@media (min-width: 769px) {
+  .mobile-cue {
+    display: none;
+  }
+}
+
+/* Adjust cue position for different screen sizes */
+@media (max-width: 480px) {
+  .mobile-cue-arrow {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .mobile-cue-arrow i {
+    font-size: 20px;
+  }
+  
+  .mobile-cue-text {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+}
 
 /* Not include */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
