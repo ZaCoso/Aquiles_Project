@@ -2574,6 +2574,13 @@ img {
   gap: 20px;
 }
 
+.app-buttons-mobile {
+  display: none;
+  justify-content: center;
+  margin-top: 20px;
+  margin-bottom: 25px;
+}
+
 .google-play-button {
   display: inline-block;
   background-color: rgba(0, 0, 0, 0.7);
@@ -3259,6 +3266,28 @@ img {
 
   .app-showcase {
     padding: 100px 20px;
+  }
+  
+  .app-content {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .app-info {
+    order: 1;
+    margin-bottom: 30px;
+  }
+  
+  .app-mockup {
+    order: 2;
+  }
+  
+  .app-buttons {
+    display: none;
+  }
+  
+  .app-buttons-mobile {
+    display: flex;
   }
 }
 
