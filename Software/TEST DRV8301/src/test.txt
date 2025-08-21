@@ -1,0 +1,21 @@
+#include <Arduino.h>
+
+#define PWM_PIN 15    // GPIO donde querés PWM
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("PWM en Raspberry Pi Pico con control total");
+
+  // Configurar PWM en ese pin
+  uint slice = pwm_gpio_to_slice_num(PWM_PIN);    // Obtener canal PWM del pin
+  gpio_set_function(PWM_PIN, GPIO_FUNC_PWM);       // Asignar función PWM al pin
+
+  pwm_set_wrap(slice, 999);      // TOP = 999 → 1000 pasos → resolución de 10 bits
+  pwm_set_clkdiv(slice, 125.0f); // Reloj dividido → Frecuencia = 1 kHz
+  pwm_set_chan_level(slice, pwm_gpio_to_channel(PWM_PIN), 500); // Duty: 50%
+  pwm_set_enabled(slice, true); // Habilitar el PWM
+}
+
+void loop() {
+  // PWM constante
+}
