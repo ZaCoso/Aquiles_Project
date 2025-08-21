@@ -126,7 +126,7 @@ Si deseas colaborar con el desarrollo de AQUILES, puedes contribuir con:
 - 🏆 LinkedIn: [Rodrigo Alexis Lin](https://www.linkedin.com/in/rodrigo-lin-61210a35b/)
 - 🌐 Github: [alexisrodrigolin](https://github.com/alexisrodrigolin)
 
-### Mauricio Contardi Trillo
+### Mauricio Trillo Contardi
 
 - 📷 Instagram: [@mauritrillo\_](https://www.instagram.com/mauritrillo_/)
 - 📧 Mail: trillocontardimauricio@gmail.com
