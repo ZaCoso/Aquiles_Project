@@ -345,6 +345,89 @@ if (document.readyState === "loading") {
           icon.classList.add("fa-bars")
         }
       })
+
+      // Función para cerrar el menú móvil
+      function closeMobileMenu() {
+        mobileMenu.classList.remove("active")
+        const icon = mobileMenuBtn.querySelector("i")
+        icon.classList.remove("fa-times")
+        icon.classList.add("fa-bars")
+      }
+
+      // Cerrar menú al detectar zoom/doble tap en mobile
+      function installZoomCloseHandlers() {
+        const vv = window.visualViewport
+        let lastScale = vv ? vv.scale : 1
+
+        function handlePotentialZoom() {
+          if (mobileMenu.classList.contains("active")) {
+            closeMobileMenu()
+          }
+        }
+
+        // visualViewport: cambios de escala (pinch-to-zoom)
+        if (vv) {
+          vv.addEventListener("resize", () => {
+            const newScale = vv.scale
+            if (typeof newScale === "number" && Math.abs(newScale - lastScale) > 0.01) {
+              lastScale = newScale
+              handlePotentialZoom()
+            }
+          })
+        }
+
+        // iOS Safari: gestos de zoom
+        window.addEventListener("gesturestart", handlePotentialZoom)
+        window.addEventListener("gesturechange", handlePotentialZoom)
+        window.addEventListener("gestureend", handlePotentialZoom)
+
+        // Doble tap: detectar dos toques consecutivos en ~300ms en el mismo lugar
+        let lastTapTime = 0
+        let lastTapX = 0
+        let lastTapY = 0
+        document.addEventListener(
+          "touchend",
+          (e) => {
+            const now = Date.now()
+            const t = e.changedTouches && e.changedTouches[0]
+            if (!t) return
+            const dt = now - lastTapTime
+            const dx = Math.abs(t.clientX - lastTapX)
+            const dy = Math.abs(t.clientY - lastTapY)
+            if (dt < 300 && dx < 20 && dy < 20) {
+              handlePotentialZoom()
+            }
+            lastTapTime = now
+            lastTapX = t.clientX
+            lastTapY = t.clientY
+          },
+          { passive: true },
+        )
+
+        // Cambio de orientación
+        window.addEventListener("orientationchange", handlePotentialZoom)
+      }
+
+      installZoomCloseHandlers()
+
+      // Detectar zoom con diferentes métodos (compatibilidad adicional)
+      window.addEventListener("resize", () => {
+        // Si el viewport cambia por zoom y el menú está abierto, cerrar
+        if (mobileMenu.classList.contains("active")) {
+          closeMobileMenu()
+        }
+      })
+
+      // Cerrar el menú al hacer scroll en mobile
+      window.addEventListener(
+        "scroll",
+        () => {
+          if (mobileMenu.classList.contains("active")) {
+            closeMobileMenu()
+          }
+        },
+        { passive: true },
+      )
     }
   
     // Header con efecto de scroll
@@ -663,27 +746,33 @@ if (document.readyState === "loading") {
     // Inicializar el primer panel como activo
     document.getElementById("spec-ia").classList.add("active")
   
-    // Manejar clics en los hotspots
-    const hotspots = document.querySelectorAll(".hotspot")
-    hotspots.forEach((hotspot) => {
-      hotspot.addEventListener("click", function () {
-        const feature = this.getAttribute("data-feature")
-  
-        // Ocultar todos los paneles
-        document.querySelectorAll(".spec-panel").forEach((panel) => {
-          panel.classList.remove("active")
-        })
-  
-        // Mostrar el panel correspondiente
-        document.getElementById(`spec-${feature}`).classList.add("active")
-  
-        // Efecto visual en el hotspot
-        this.querySelector(".hotspot-ring").style.animation = "none"
-        setTimeout(() => {
-          this.querySelector(".hotspot-ring").style.animation = "pulse 2s infinite"
-        }, 10)
+      // Manejar clics en los hotspots
+  const hotspots = document.querySelectorAll(".hotspot")
+  hotspots.forEach((hotspot) => {
+    hotspot.addEventListener("click", function () {
+      const feature = this.getAttribute("data-feature")
+
+      // Ocultar todos los paneles
+      document.querySelectorAll(".spec-panel").forEach((panel) => {
+        panel.classList.remove("active")
       })
+
+      // Mostrar el panel correspondiente
+      document.getElementById(`spec-${feature}`).classList.add("active")
+
+      // Efecto visual en el hotspot
+      this.querySelector(".hotspot-ring").style.animation = "none"
+      setTimeout(() => {
+        this.querySelector(".hotspot-ring").style.animation = "pulse 2s infinite"
+      }, 10)
+
+      // Ocultar el texto "Selecciona la parte!" cuando se selecciona cualquier hotspot
+      const textHidden = document.querySelector(".text-hidden")
+      if (textHidden) {
+        textHidden.style.display = "none"
+      }
     })
+  })
   
     // Funcionalidad para las pestañas de especificaciones
     const specTabs = document.querySelectorAll(".spec-tab")
@@ -1176,7 +1265,54 @@ function initMobileCue() {
 document.addEventListener('DOMContentLoaded', () => {
   initMobileCue();
   initSponsorsCarousel();
+  moveImageToTopOnMobile();
 });
+
+// ===== MOBILE IMAGE POSITIONING =====
+function moveImageToTopOnMobile() {
+  // Check if it's mobile view (width <= 768px)
+  function isMobile() {
+    return window.innerWidth <= 768;
+  }
+
+  // Function to hide image on mobile
+  function hideImageOnMobile() {
+    const mobileImage = document.querySelector('.mobile-hero-image');
+    
+    if (mobileImage && isMobile()) {
+      // Hide the image completely on mobile
+      mobileImage.style.display = 'none';
+    }
+  }
+
+  // Function to show image on desktop
+  function showImageOnDesktop() {
+    const mobileImage = document.querySelector('.mobile-hero-image');
+    
+    if (mobileImage && !isMobile()) {
+      // Show the image on desktop
+      mobileImage.style.display = '';
+    }
+  }
+
+  // Initial check
+  if (isMobile()) {
+    hideImageOnMobile();
+  }
+
+  // Handle window resize
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (isMobile()) {
+        hideImageOnMobile();
+      } else {
+        showImageOnDesktop();
+      }
+    }, 250);
+  });
+}
 
 // ===== SPONSORS CAROUSEL FUNCTIONALITY =====
 function initSponsorsCarousel() {
