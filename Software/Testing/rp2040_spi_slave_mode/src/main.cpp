@@ -15,7 +15,9 @@ void setup() {
   gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
   gpio_set_function(PIN_CS,   GPIO_FUNC_SPI);
 
-  // Inicializar SPI0 en modo slave
+  // Inicializar S/-=[\]\
+\]
+PI0 en modo slave
   spi_init(spi0, 1000 * 1000);   // La freq acá no importa mucho, la marca el master
   spi_set_slave(spi0, true);
 
