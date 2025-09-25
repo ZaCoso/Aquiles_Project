@@ -1,5 +1,5 @@
 #include "AppTasks.h"
-
+#include <SPI.h>
 ///Semaphore
 xSemaphoreHandle semph_LeftMotor;
 xSemaphoreHandle semph_RightMotor;

@@ -2,6 +2,11 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+static const int PIN_SCK  = 36;
+static const int PIN_MISO = 37;
+static const int PIN_MOSI = 35;
+static const int PIN_CS   = 39;
+
 ///Stacks
 #define tskINIT_STACK					(configMINIMAL_STACK_SIZE)
 #define tskBLINK_STACK					(configMINIMAL_STACK_SIZE)
