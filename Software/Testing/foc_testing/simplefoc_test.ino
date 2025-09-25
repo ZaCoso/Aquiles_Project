@@ -1,48 +1,60 @@
 #include <SimpleFOC.h>
 
-// Phase A
-#define INHA_PIN 0   // GP0 → HIN1
-#define INLA_PIN 1   // GP1 → LIN1
+// Pines PWM según tu pinout
+#define INU 1   // GP1 → fase U (LIN1)
+#define INV 5   // GP5 → fase V (LIN2)
+#define INW 3   // GP3 → fase W (LIN3)
 
-// Phase B
-#define INHB_PIN 2   // GP2 → HIN2
-#define INLB_PIN 3   // GP3 → LIN2
+// Pines de enable
+#define EN1 0   // GP0 → SD1
+#define EN2 4   // GP4 → SD2
+#define EN3 2   // GP2 → SD3
 
-// Phase C
-#define INHC_PIN 4   // GP4 → HIN3
-#define INLC_PIN 5   // GP5 → LIN3
-
-// Motor parameter
-#define POLE_PAIRS 7   // Cambiar según tu motor real
-
-// Define motor and driver instances
-BLDCMotor motor = BLDCMotor(POLE_PAIRS);
-BLDCDriver6PWM driver = BLDCDriver6PWM(INHA_PIN, INLA_PIN, INHB_PIN, INLB_PIN, INHC_PIN, INLC_PIN);
+// Motor y driver
+BLDCMotor motor(7);                   // 7 pole pairs (cambia por el tuyo)
+BLDCDriver3PWM driver(INU, INV, INW); 
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Test elemental IR2104 + RP2040");
+  driver.pwm_frequency = 30000;
 
-  // Configurar driver
-  driver.voltage_power_supply = 12;   // Alimentación
-  driver.dead_zone = 0.04;
-  driver.pwm_frequency = 1000;
+  // Enable pins
+  pinMode(EN1, OUTPUT);
+  pinMode(EN2, OUTPUT);
+  pinMode(EN3, OUTPUT);
+  digitalWrite(EN1, HIGH);
+  digitalWrite(EN2, HIGH);
+  digitalWrite(EN3, HIGH);
+
+  // Driver simple
+  driver.voltage_power_supply = 9.8;   // ajusta a tu fuente
+  driver.voltage_limit = 8;           // bajo para test
   driver.init();
-
-  // Vincular motor y driver
   motor.linkDriver(&driver);
 
-  // Control en lazo abierto de velocidad
+  // Config motor: openloop voltage
   motor.controller = MotionControlType::velocity_openloop;
-  motor.voltage_limit = 12;   // Voltaje seguro para pruebas
-
-  // Inicializar motor
+  motor.voltage_limit = 3;    // subí luego
   motor.init();
 
-  // Velocidad objetivo inicial
-  motor.target = 100;   // [rad/s]
+
+
+  Serial.println("Listo, escribí velocidad en consola");
 }
 
 void loop() {
-  motor.loopFOC();  // Necesario aunque sea open-loop
-  motor.move();     // Ejecuta el movimiento
+  motor.loopFOC(); 
+
+  // mueve en open-loop con target fijo
+  motor.move();
+
+  // lectura consola → setear velocidad
+  if (Serial.available()) {
+    String in = Serial.readStringUntil('\n');
+    float val = in.toFloat();
+    motor.target = val;   // velocidad en rad/s
+    Serial.print("Nuevo target = ");
+    Serial.println(val);
+  }
 }
