@@ -7,7 +7,7 @@
 #define PIN_SCK  2   // SCK0
 #define PIN_MOSI 3   // MOSI0 (TX del RP2040)
 #define PIN_MISO 4   // MISO0 (RX del RP2040)
-#define PIN_CS   5   // CSn0
+#define PIN_CS   1   // CSn0
 
 static inline uint8_t crc8_sum(const uint8_t* d, size_t n) {
   uint16_t s = 0; for (size_t i = 0; i < n; ++i) s += d[i];
