@@ -1,5 +1,5 @@
 #include "AppTasks.h"
-#include <SPI.h>
+
 ///Semaphore
 xSemaphoreHandle semph_LeftMotor;
 xSemaphoreHandle semph_RightMotor;
@@ -16,7 +16,7 @@ void InitTask(void *params){
     digitalWrite(PIN_CS, HIGH);
 
   // Iniciar bus VSPI (NO en otra tarea antes que ésta)
-    spi.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
+    SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
 
 }
 void BlinkTask(void *params){
@@ -25,9 +25,9 @@ void BlinkTask(void *params){
     vTaskDelay(pdMS_TO_TICKS(500));}
 }
 // ---- Tarea que envía el paquete SPI cada 500 ms ----
-void vSpiTxTask(void* pv) {
+void vSpiTxTask(void* params) {
   // Arrancamos la transacción SPI en esta tarea
-  spi.beginTransaction(SPISettings(1'000'000, MSBFIRST, SPI_MODE0));
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
   for (;;) {
     // Tus 3 enteros
     int16_t v1 = 1234;
@@ -46,16 +46,12 @@ void vSpiTxTask(void* pv) {
     memcpy(&buf[2], payload, 6);
     buf[8] = crc8_sum(payload, 6);
 
-    // Si hay más tareas que usan SPI, protegemos con mutex
-    if (xSpiMutex) xSemaphoreTake(xSpiMutex, portMAX_DELAY);
 
     digitalWrite(PIN_CS, LOW);
     for (size_t i = 0; i < sizeof(buf); ++i) {
-      (void)spi.transfer(buf[i]);  // opcional: leer respuesta del slave
+      (void)SPI.transfer(buf[i]);  // opcional: leer respuesta del slave
     }
     digitalWrite(PIN_CS, HIGH);
-
-    if (xSpiMutex) xSemaphoreGive(xSpiMutex);
 
     // Log no muy frecuente para no bloquear
     static uint32_t n = 0;
@@ -63,6 +59,6 @@ void vSpiTxTask(void* pv) {
     vTaskDelay(pdMS_TO_TICKS(500));
   }
   // Nunca llega, pero por prolijidad:
-  spi.endTransaction();
+  SPI.endTransaction();
   vTaskDelete(nullptr);
 }
