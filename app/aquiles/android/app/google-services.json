@@ -12,7 +12,20 @@
           "package_name": "com.example.aquiles"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "144407449241-cnka9tkmuhspq5t2edq9m03th47svhsp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.aquiles",
+            "certificate_hash": "ca1c07a9a50614616551b66f333bf5af4a0df44a"
+          }
+        },
+        {
+          "client_id": "144407449241-045rtr0qk9i8gg6oqs5go4hu1d9unli8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAe-oopnvMoxRZTbeyUp_x8rACngivf1Rs"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "144407449241-045rtr0qk9i8gg6oqs5go4hu1d9unli8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "144407449241-q02t9irg243okb2bb9ti2qaj02scm6kg.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.aquiles"
+              }
+            }
+          ]
         }
       }
     }
