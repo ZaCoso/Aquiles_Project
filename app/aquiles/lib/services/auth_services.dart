@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AuthServices {
@@ -33,6 +34,31 @@ class AuthServices {
       return null;
     }
     return await firebaseAuth.currentUser?.uid;
+  }
+
+  Future<User?> signInWithGoogle() async {
+    try {
+      // Trigger the Google authentication flow
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return null; // user aborted
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final result = await firebaseAuth.signInWithCredential(credential);
+      return result.user;
+    } on FirebaseAuthException catch (e) {
+      print('Google sign-in Firebase error: ${e.code}');
+      rethrow;
+    } catch (e) {
+      print('Google sign-in error: $e');
+      rethrow;
+    }
   }
 
   Future<void> signOut() async {

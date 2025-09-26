@@ -16,6 +16,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _showSocial = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -24,7 +25,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 900),
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
@@ -33,14 +34,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       ),
     );
     // Precache large images, then start fade animation to avoid first-frame jank.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        await precacheImage(
-            const AssetImage('assets/images/exoesqueleto-1.png'), context);
-        await precacheImage(
-            const AssetImage('assets/images/logo.png'), context);
-      } catch (_) {}
-      if (mounted) _animationController.forward();
+    // Start immediately; also precache images without blocking first frame.
+    _animationController.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Fire-and-forget: don't block first frame on image decode
+      precacheImage(
+          const AssetImage('assets/images/exoesqueleto-1.png'), context);
+      precacheImage(const AssetImage('assets/images/logo.png'), context);
+      // If needed, ensure it's running (safe if already started)
+      if (mounted &&
+          !_animationController.isAnimating &&
+          _animationController.value == 0.0) {
+        _animationController.forward();
+      }
+      // Defer heavy SVG row until after first frame
+      if (mounted) {
+        setState(() => _showSocial = true);
+      }
     });
   }
 
@@ -76,13 +86,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             child: Center(
               child: Opacity(
                 opacity: 0.10,
-                child: Transform.scale(
-                  scale: 1.3,
-                  child: Image.asset(
-                    'assets/images/exoesqueleto-1.png',
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.low,
-                  ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final targetWidthPx = (constraints.maxWidth *
+                            MediaQuery.of(context).devicePixelRatio)
+                        .round();
+                    return Image.asset(
+                      'assets/images/exoesqueleto-1.png',
+                      fit: BoxFit.cover,
+                      alignment: Alignment.center,
+                      cacheWidth: targetWidthPx,
+                      filterQuality: FilterQuality.low,
+                    );
+                  },
                 ),
               ),
             ),
@@ -319,48 +335,67 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                             ],
                           ),
                           const SizedBox(height: 16),
-                          // Fila de iconos sociales
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              IconButton(
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                          'Google Sign-In próximamente...'),
-                                      backgroundColor: Color(0xFF3F797A),
-                                      duration: Duration(seconds: 2),
+                          // Fila de iconos sociales (defer to post-frame)
+                          if (_showSocial)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                IconButton(
+                                  onPressed: () {
+                                    () async {
+                                      if (!mounted) return;
+                                      setState(() => _isLoading = true);
+                                      try {
+                                        final user = await ref
+                                            .read(authServiceProvider)
+                                            .signInWithGoogle();
+                                        if (mounted) {
+                                          setState(() => _isLoading = false);
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          setState(() => _isLoading = false);
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                  'No se pudo iniciar con Google'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        }
+                                        print('Google login error: $e');
+                                      }
+                                    }();
+                                  },
+                                  padding: EdgeInsets.zero,
+                                  iconSize: 48,
+                                  icon: Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.06),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color:
+                                            Color(0xFF8CCBD5).withOpacity(0.3),
+                                      ),
                                     ),
-                                  );
-                                },
-                                padding: EdgeInsets.zero,
-                                iconSize: 48,
-                                icon: Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.06),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: const Color(0xFF8CCBD5)
-                                          .withOpacity(0.3),
-                                    ),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: SvgPicture.asset(
-                                    'assets/images/google_icon.svg',
-                                    width: 24,
-                                    height: 24,
-                                    colorFilter: const ColorFilter.mode(
-                                      Color(0xFF8CCBD5),
-                                      BlendMode.srcIn,
+                                    alignment: Alignment.center,
+                                    child: SvgPicture.asset(
+                                      'assets/images/google_icon.svg',
+                                      width: 24,
+                                      height: 24,
+                                      colorFilter: const ColorFilter.mode(
+                                        Color(0xFF8CCBD5),
+                                        BlendMode.srcIn,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          const SizedBox(height: 48),
                         ],
                       ),
                     ),
