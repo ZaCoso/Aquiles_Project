@@ -334,10 +334,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                     ),
                                   );
                                 },
-                                icon: SvgPicture.asset(
-                                  'assets/images/google_aquiles.svg',
-                                  width: 28,
-                                  height: 28,
+                                padding: EdgeInsets.zero,
+                                iconSize: 48,
+                                icon: Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.06),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: const Color(0xFF8CCBD5)
+                                          .withOpacity(0.3),
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: SvgPicture.asset(
+                                    'assets/images/google_icon.svg',
+                                    width: 24,
+                                    height: 24,
+                                    colorFilter: const ColorFilter.mode(
+                                      Color(0xFF8CCBD5),
+                                      BlendMode.srcIn,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
