@@ -10,7 +10,7 @@ static const int PIN_CS   = 39;
 
 ///Stacks
 #define tskINIT_STACK					(configMINIMAL_STACK_SIZE)
-#define tskBLINK_STACK					(configMINIMAL_STACK_SIZE)
+#define tskBLINK_STACK					(4*configMINIMAL_STACK_SIZE)
 #define tskSPI_TX_STACK				(configMINIMAL_STACK_SIZE)
 ///Priorities
 #define tskINIT_PRIORITY			    (tskIDLE_PRIORITY + 3UL)

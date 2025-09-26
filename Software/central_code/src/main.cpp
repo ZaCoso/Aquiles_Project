@@ -3,9 +3,12 @@
 
 void setup() {
   // put your setup code here, to run once:
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("Iniciando...");
   xTaskCreate(InitTask, "Init", tskINIT_STACK, NULL, tskINIT_PRIORITY, NULL);
   xTaskCreate(BlinkTask, "Blinky",tskBLINK_STACK, NULL, tskBLINK_PRIORITY, NULL);
-  xTaskCreate(vSpiTxTask, "SPI Tx", tskSPI_TX_STACK, NULL, tskSPI_TX_PRIORITY, NULL);
+  // xTaskCreate(vSpiTxTask, "SPI Tx", tskSPI_TX_STACK, NULL, tskSPI_TX_PRIORITY, NULL);
 }
 
 void loop() {

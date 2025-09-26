@@ -1,27 +1,28 @@
 #include "AppTasks.h"
 
 ///Semaphore
-xSemaphoreHandle semph_LeftMotor;
-xSemaphoreHandle semph_RightMotor;
+// xSemaphoreHandle semph_LeftMotor;
+// xSemaphoreHandle semph_RightMotor;
 
 /// Queues
 
 void InitTask(void *params){
-    semph_LeftMotor = xSemaphoreCreateBinary();
-    semph_RightMotor = xSemaphoreCreateBinary();
+    // semph_LeftMotor = xSemaphoreCreateBinary();
+    // semph_RightMotor = xSemaphoreCreateBinary();
     pinMode(46, OUTPUT);
-    vTaskDelete(NULL);
-    Serial.begin(115200);
-    pinMode(PIN_CS, OUTPUT);
-    digitalWrite(PIN_CS, HIGH);
 
-  // Iniciar bus VSPI (NO en otra tarea antes que ésta)
-    SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
+    // pinMode(PIN_CS, OUTPUT);
+    // digitalWrite(PIN_CS, HIGH);
+
+    // SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
+    vTaskDelete(NULL);
 
 }
 void BlinkTask(void *params){
     while(1){
     digitalWrite(46, !digitalRead(46));
+
+    Serial.printf("[SPI] Enviando: ");
     vTaskDelay(pdMS_TO_TICKS(500));}
 }
 // ---- Tarea que envía el paquete SPI cada 500 ms ----
@@ -45,7 +46,6 @@ void vSpiTxTask(void* params) {
     buf[1] = 6;     // LEN
     memcpy(&buf[2], payload, 6);
     buf[8] = crc8_sum(payload, 6);
-
 
     digitalWrite(PIN_CS, LOW);
     for (size_t i = 0; i < sizeof(buf); ++i) {
