@@ -78,7 +78,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           children: [
             Image.asset(
               'assets/images/logo.png',
-              width: 70,
+              width: 45,
             ),
             const SizedBox(width: 8),
           ],

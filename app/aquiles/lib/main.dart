@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/login_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'screens/instructions_screen.dart';
+import 'screens/step_detail_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,6 +64,8 @@ class AquilesApp extends StatelessWidget {
       home: const AuthChecker(),
       routes: {
         '/login': (context) => const LoginScreen(),
+        '/instructions': (context) => const InstructionsScreen(),
+        '/instructions/step': (context) => const StepDetailScreen(),
         '/profile': (context) => const ProfileScreen(),
       },
     );
