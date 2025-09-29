@@ -88,63 +88,42 @@ class InstructionStepLayout extends StatelessWidget {
                             physics: const BouncingScrollPhysics(),
                             child: Column(
                               children: [
-                                Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(28),
-                                    color: const Color(0xFF123347)
-                                        .withOpacity(0.97),
-                                    border: Border.all(
-                                      color: const Color(0xFF8FC3CE),
-                                      width: 1.1,
-                                    ),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        color: Color(0x330F171F),
-                                        offset: Offset(0, 24),
-                                        blurRadius: 38,
-                                        spreadRadius: -18,
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 320),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  transitionBuilder: (child, animation) {
+                                    final curved = CurvedAnimation(
+                                      parent: animation,
+                                      curve: Curves.easeOutCubic,
+                                      reverseCurve: Curves.easeInCubic,
+                                    );
+                                    final offsetAnimation = Tween<Offset>(
+                                      begin: const Offset(0.06, 0),
+                                      end: Offset.zero,
+                                    ).animate(curved);
+                                    return FadeTransition(
+                                      opacity: curved,
+                                      child: SlideTransition(
+                                        position: offsetAnimation,
+                                        child: child,
                                       ),
-                                    ],
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 26,
-                                    vertical: 14,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(22),
-                                        child: Image.asset(
-                                          step.imageAssetPath,
-                                          height: 214,
-                                          width: double.infinity,
-                                          fit: BoxFit.cover,
-                                          alignment: Alignment.topCenter,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 24),
-                                      Text(
-                                        step.title,
-                                        style: const TextStyle(
-                                          fontSize: 23,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFFF4F9FF),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        '(${step.stepNumber}/${step.totalSteps})',
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          color: Color(0xFFA9BECD),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 20),
-                                      ..._buildInstructionTexts(
-                                          step.instructions),
-                                    ],
+                                    );
+                                  },
+                                  layoutBuilder:
+                                      (currentChild, previousChildren) {
+                                    return Stack(
+                                      alignment: Alignment.topCenter,
+                                      children: <Widget>[
+                                        ...previousChildren,
+                                        if (currentChild != null) currentChild
+                                      ],
+                                    );
+                                  },
+                                  child: _InstructionCard(
+                                    key: ValueKey(
+                                        '${step.stepNumber}-${step.title}'),
+                                    step: step,
                                   ),
                                 ),
                                 const SizedBox(height: 32),
@@ -167,11 +146,26 @@ class InstructionStepLayout extends StatelessWidget {
                           ),
                         ),
                         onPressed: onPrimaryAction,
-                        child: Text(
-                          primaryActionLabel,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) {
+                            final curved = CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                              reverseCurve: Curves.easeInCubic,
+                            );
+                            return FadeTransition(
+                                opacity: curved, child: child);
+                          },
+                          child: Text(
+                            primaryActionLabel,
+                            key: ValueKey(primaryActionLabel),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
@@ -182,6 +176,72 @@ class InstructionStepLayout extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InstructionCard extends StatelessWidget {
+  const _InstructionCard({super.key, required this.step});
+
+  final InstructionStepData step;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        color: const Color(0xFF123347).withOpacity(0.97),
+        border: Border.all(
+          color: const Color(0xFF8FC3CE),
+          width: 1.1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x330F171F),
+            offset: Offset(0, 24),
+            blurRadius: 38,
+            spreadRadius: -18,
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 26,
+        vertical: 14,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Image.asset(
+              step.imageAssetPath,
+              height: 214,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            step.title,
+            style: const TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFFF4F9FF),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '(${step.stepNumber}/${step.totalSteps})',
+            style: const TextStyle(
+              fontSize: 15,
+              color: Color(0xFFA9BECD),
+            ),
+          ),
+          const SizedBox(height: 20),
+          ..._buildInstructionTexts(step.instructions),
+        ],
       ),
     );
   }
