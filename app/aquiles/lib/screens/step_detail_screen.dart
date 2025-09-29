@@ -23,6 +23,16 @@ const _defaultSteps = [
       'Superponga uno sobre el otro y ajústelos a la medida deseada.',
     ],
   ),
+  InstructionStepData(
+    title: 'Ajuste extensiones de pierna',
+    stepNumber: 3,
+    totalSteps: 4,
+    imageAssetPath: 'assets/images/exoesqueleto-1.png',
+    instructions: [
+      'Mantene ambas piernas rectas y coloca las correas delanteras de pierna en la parte frontal de los muslos.',
+      'Ajuste tirando de la cinta hasta lograr el calce deseado.',
+    ],
+  ),
 ];
 
 class StepDetailScreen extends StatefulWidget {
