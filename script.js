@@ -929,36 +929,36 @@ document.addEventListener('DOMContentLoaded', function() {
   // Define positions for each state
   var positionsFront = {
       ia:  { top: "25%", left: "75%" },
-      bateria: { top: "45%", left: "80%" },
-      sensor: { top: "66%", left: "60%"  },
-      motor: { top: "42%", left: "77%" },
-      regulador: { top: "74%", left: "43%" },
+      bateria: { top: "15%", left: "64%" },
+      sensor: { top: "27%", left: "28%"  },
+      motor: { top: "40%", left: "76%" },
+      regulador: { top: "80%", left: "38%" },
       volver: { top: "85%", left: "85%" }
   };
   var positionsBack = {
-      ia:  { top: "20%", left: "22%" },
-      bateria: { top: "35%", left: "38%" },
+      ia:  { top: "24%", left: "34%" },
+      bateria: { top: "17%", left: "80%" },
       sensor: { top: "60%", left: "20%" },
-      motor: { top: "33%", left: "88%" },
-      regulador: { top: "74%", left: "52%" },
+      motor: { top: "32%", left: "16%" },
+      regulador: { top: "79%", left: "44%" },
       volver: { top: "85%", left: "85%" }
   };
 
   // --- MOBILE HOTSPOT POSITIONS ---
   var positionsFrontMobile = {
       ia:  { top: "25%", left: "75%" },
-      bateria: { top: "45%", left: "80%" },
-      sensor: { top: "60%", left: "55%" },
+      bateria: { top: "14%", left: "60%" },
+      sensor: { top: "26%", left: "33%" },
       motor: { top: "40%", left: "70%" },
-      regulador: { top: "74%", left: "43%" },
+      regulador: { top: "78%", left: "42%" },
       volver: { top: "85%", left: "85%" }
   };
   var positionsBackMobile = {
-      ia:  { top: "20%", left: "22%" },
-      bateria: { top: "35%", left: "38%" },
+      ia:  { top: "22%", left: "37%" },
+      bateria: { top: "17%", left: "72%" },
       sensor: { top: "60%", left: "25%" },
-      motor: { top: "30%", left: "79%" },
-      regulador: { top: "74%", left: "52%" },
+      motor: { top: "32%", left: "24%" },
+      regulador: { top: "80%", left: "44%" },
       volver: { top: "85%", left: "85%" }
   };
 
@@ -1018,16 +1018,16 @@ document.addEventListener('DOMContentLoaded', function() {
   const specPanelTransformsFront = {
     'spec-motor': 'translateY(25%)',
     'spec-ia': 'translateY(30%)',
-    'spec-bateria': 'translateY(80%)',
-    'spec-sensor': 'translateY(145%)',
-    'spec-regulador': 'translateY(165%)'
+    'spec-bateria': 'translateY(0%)',
+    'spec-sensor': 'translateY(0%)',
+    'spec-regulador': 'translateY(100%)'
   };
   const specPanelTransformsBack = {
-    'spec-ia': 'translateY(25%)',
-    'spec-motor': 'translateY(60%)',
-    'spec-bateria': 'translateY(63%)',
+    'spec-ia': 'translateY(0%)',
+    'spec-motor': 'translateY(0%)',
+    'spec-bateria': 'translateY(0%)',
     'spec-sensor': 'translateY(132%)',
-    'spec-regulador': 'translateY(165%)'
+    'spec-regulador': 'translateY(100%)'
   };
 
   function setSpecPanelTransforms(transforms) {
