@@ -33,6 +33,15 @@ const _defaultSteps = [
       'Ajuste tirando de la cinta hasta lograr el calce deseado.',
     ],
   ),
+  InstructionStepData(
+    title: 'Encender',
+    stepNumber: 4,
+    totalSteps: 4,
+    imageAssetPath: 'assets/images/exoesqueleto-1.png',
+    instructions: [
+      'Presiona el pulsador situado en el modulo de la espalda baja.',
+    ],
+  ),
 ];
 
 class StepDetailScreen extends StatefulWidget {
