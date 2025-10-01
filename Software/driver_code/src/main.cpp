@@ -4,7 +4,7 @@
 
 AS5600 encoder;    
 
-void sensor_measure(){
+void encoder_measure(){
   long angle_raw = encoder.readAngle();   
   float degrees = (angle_raw / 4096.0) * 360.0;
   int magnitude = encoder.readMagnitude();    
@@ -25,7 +25,7 @@ void setup() {
 }
 
 void loop() {
-
+  encoder_measure();
 
   delay(100);
 }
