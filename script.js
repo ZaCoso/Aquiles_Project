@@ -217,6 +217,29 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     })
   })
+  // ===== Award optional image toggles =====
+  document.querySelectorAll('.award-item').forEach((item) => {
+    const imgBlock = item.querySelector('.award-image')
+    if (imgBlock) {
+      let toggle = item.querySelector('.award-image-toggle')
+      if (!toggle) {
+        toggle = document.createElement('button')
+        toggle.className = 'award-image-toggle'
+        toggle.type = 'button'
+        toggle.textContent = 'Ver imagen'
+        const desc = item.querySelector('.award-desc') || item.querySelector('.award-content p')
+        if (desc && desc.parentNode) {
+          desc.parentNode.insertBefore(toggle, desc.nextSibling)
+        } else {
+          item.appendChild(toggle)
+        }
+      }
+      toggle.addEventListener('click', () => {
+        const isOpen = imgBlock.classList.toggle('open')
+        toggle.textContent = isOpen ? 'Ocultar imagen' : 'Ver imagen'
+      })
+    }
+  })
 
   // Animación de partículas en el hero
   function createHeroParticles() {

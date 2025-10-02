@@ -3750,13 +3750,12 @@ img {
   left: 50%;
   transform: translateX(-50%);
   width: 2px;
-  height: 100%;
-  background-color: rgba(140, 203, 213, 0.3);
+  height: 104%;
+  background-color: rgba(140, 203, 213, 0.6); /* más vívido */
   z-index: 1;
 }
 
 .year-block {
-  margin-bottom: 60px;
   position: relative;
 }
 
@@ -3848,15 +3847,78 @@ img {
   line-height: 1.7;
 }
 
+/* Award optional image (collapsed by default) */
+.award-image {
+  display: none;
+  margin-top: 16px;
+}
+
+.award-image.open {
+  display: block;
+}
+
+.award-image img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(140, 203, 213, 0.2);
+}
+
+.award-image-toggle {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(140, 203, 213, 0.2);
+  color: var(--color-neon-teal);
+  border: 1px solid rgba(140, 203, 213, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.award-image-toggle:hover {
+  background: rgba(140, 203, 213, 0.3);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+
+
+
+/* MOBILE VIEW */
+
+
 @media (max-width: 768px) {
   .award-item {
     width: 100%;
     margin-left: 0;
     margin-right: 0;
+    background-color: rgba(16, 32, 48, 1); /* opaco en mobile para tapar la línea */
+    position: relative;
+    margin-bottom: 60px; /* más espacio entre items en mobile */
   }
   .award-content {
     flex: 1 1 auto;
     min-width: 0; /* permite que el texto haga wrap y no desborde */
+  }
+
+  /* Flecha hacia abajo centrada arriba de cada award-item */
+  .award-item::before {
+    content: "";
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid rgba(140, 203, 213, 1); /* más vívido y punta hacia abajo */
+    z-index: 3;
+  }
+
+  /* Más separación bajo la línea vertical en mobile */
+  .awards-timeline {
+    margin-bottom: 48px;
   }
 }
 
