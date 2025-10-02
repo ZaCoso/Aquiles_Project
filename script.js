@@ -218,27 +218,38 @@ document.addEventListener("DOMContentLoaded", () => {
     })
   })
   // ===== Award optional image toggles =====
-  document.querySelectorAll('.award-item').forEach((item) => {
-    const imgBlock = item.querySelector('.award-image')
-    if (imgBlock) {
-      let toggle = item.querySelector('.award-image-toggle')
-      if (!toggle) {
-        toggle = document.createElement('button')
-        toggle.className = 'award-image-toggle'
-        toggle.type = 'button'
-        toggle.textContent = 'Ver imagen'
-        const desc = item.querySelector('.award-desc') || item.querySelector('.award-content p')
-        if (desc && desc.parentNode) {
-          desc.parentNode.insertBefore(toggle, desc.nextSibling)
-        } else {
-          item.appendChild(toggle)
-        }
-      }
-      toggle.addEventListener('click', () => {
-        const isOpen = imgBlock.classList.toggle('open')
-        toggle.textContent = isOpen ? 'Ocultar imagen' : 'Ver imagen'
-      })
-    }
+  // Lightbox for award images (click image to open, outside or X to close)
+  const lightbox = document.createElement('div')
+  lightbox.className = 'lightbox'
+  lightbox.innerHTML = `
+    <div class="lightbox-overlay"></div>
+    <div class="lightbox-content">
+      <img src="" alt="preview" />
+      <div class="lightbox-close" aria-label="Cerrar">×</div>
+    </div>
+  `
+  document.body.appendChild(lightbox)
+
+  const lbImg = lightbox.querySelector('img')
+  const lbClose = lightbox.querySelector('.lightbox-close')
+  const lbOverlay = lightbox.querySelector('.lightbox-overlay')
+
+  function openLightbox(src) {
+    lbImg.src = src
+    lightbox.classList.add('active')
+  }
+  function closeLightbox() {
+    lightbox.classList.remove('active')
+    lbImg.src = ''
+  }
+  lbClose.addEventListener('click', closeLightbox)
+  lbOverlay.addEventListener('click', closeLightbox)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox()
+  })
+
+  document.querySelectorAll('.award-image img').forEach((img) => {
+    img.addEventListener('click', () => openLightbox(img.src))
   })
 
   // Animación de partículas en el hero

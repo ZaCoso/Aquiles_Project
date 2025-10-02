@@ -3809,6 +3809,10 @@ img {
 }
 
 .award-icon {
+  position: absolute;
+  /* AJUSTADOR de ICONO */
+  top: 22px;
+  left: 25px;
   width: 50px;
   height: 50px;
   background-color: rgba(140, 203, 213, 0.1);
@@ -3822,6 +3826,7 @@ img {
   flex-shrink: 0;
   box-shadow: 0 0 15px rgba(140, 203, 213, 0.3);
   transition: all 0.3s ease;
+  z-index: 1;
 }
 
 .award-item:hover .award-icon {
@@ -3830,9 +3835,38 @@ img {
   box-shadow: 0 0 20px rgba(140, 203, 213, 0.5);
 }
 
-.award-content h3 {
+.award-title-indent {
+  text-indent: 60px; /* SANGRIA*/
+  margin-right: -30px; 
+  line-height: 2.2;
+}
+
+.award-header {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.award-header h3 {
   margin-bottom: 5px;
   font-size: 1.3rem;
+  margin-right: 30px; /* Espacio para la fecha */
+}
+
+.award-date {
+  position: absolute;
+  top: 0;
+  right: -10px;
+  font-size: 0.9em;
+  color: var(--color-neon-teal);
+  font-weight: 600;
+  text-align: right;
+}
+
+.award-desc {
+  margin-bottom: 15px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.95rem;
+  line-height: 1.7;
 }
 
 .award-org {
@@ -3847,9 +3881,9 @@ img {
   line-height: 1.7;
 }
 
-/* Award optional image (collapsed by default) */
+/* Award image (always visible) */
 .award-image {
-  display: none;
+  display: block;
   margin-top: 16px;
 }
 
@@ -3857,12 +3891,21 @@ img {
   display: block;
 }
 
+.award-image {
+  margin-top: 20px;
+}
+
 .award-image img {
   width: 100%;
+  max-width: 420px;
+  max-height: 300px;
   height: auto;
   border-radius: 10px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(140, 203, 213, 0.2);
+  cursor: pointer;
+  
+  border-radius: 2rem 2rem 2rem 2rem;
 }
 
 .award-image-toggle {
@@ -3929,7 +3972,7 @@ img {
   .award-icon {
     width: 44px;
     height: 44px;
-    margin-right: 14px;
+    padding: 10px;
   }
   .award-content h3 {
     font-size: 1.1rem;
