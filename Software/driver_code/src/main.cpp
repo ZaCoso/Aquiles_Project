@@ -9,21 +9,7 @@ AS5600 encoder_i2c;
 AS5048A encoder_spi(5);  // pin CS = 5
 Adafruit_MPU6050 mpu;
 
-// --- Función para inicializar el MPU6050 ---
-void initMPU6050() {
-  if (!mpu.begin()) {
-    Serial.println("No se encontró MPU6050. Revisa conexiones!");
-    while (1) { delay(10); }
-  }
-  Serial.println("MPU6050 detectado!");
 
-  // Configuración opcional
-  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-
-  delay(100);
-}
 // --- Función para leer y mostrar datos ---
 void leerMPU6050() {
   sensors_event_t a, g, temp;
@@ -71,6 +57,7 @@ void setup() {
   while (!Serial) { delay(10); }
   Wire.begin();          // inicializa I2C
   encoder_init();
+  mpu.begin();
 }
 
 void loop() {
