@@ -3848,6 +3848,39 @@ img {
   line-height: 1.7;
 }
 
+@media (max-width: 768px) {
+  .award-item {
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .award-content {
+    flex: 1 1 auto;
+    min-width: 0; /* permite que el texto haga wrap y no desborde */
+  }
+}
+
+@media (max-width: 480px) {
+  .award-item {
+    padding: 16px;
+  }
+  .award-icon {
+    width: 44px;
+    height: 44px;
+    margin-right: 14px;
+  }
+  .award-content h3 {
+    font-size: 1.1rem;
+  }
+  .award-org {
+    font-size: 0.85rem;
+  }
+  .award-desc {
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+}
+
 .certifications {
   padding: 60px 0;
 }
