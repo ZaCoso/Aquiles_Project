@@ -1,0 +1,42 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.1.2 Chrome/138.0.7204.243 Electron/37.4.0 Safari/537.36" version="28.1.2">
+  <diagram name="第 1 页" id="IjD5MJxqZoAnGYOqRDMH">
+    <mxGraphModel dx="976" dy="755" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;exitDx=0;exitDy=0;entryX=0.625;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="xx-gzRoyfHnaLPzScCzg-1" target="xx-gzRoyfHnaLPzScCzg-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0.375;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="xx-gzRoyfHnaLPzScCzg-1" target="xx-gzRoyfHnaLPzScCzg-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-1" value="Main" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="360" y="130" width="140" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xx-gzRoyfHnaLPzScCzg-4" target="xx-gzRoyfHnaLPzScCzg-1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="330" y="160" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="300" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-4" value="Driver" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="240" y="240" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="xx-gzRoyfHnaLPzScCzg-5" target="xx-gzRoyfHnaLPzScCzg-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-5" value="Driver" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="500" y="240" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-14" value="SPI" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="510" y="140" width="60" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="xx-gzRoyfHnaLPzScCzg-16" value="SPI" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="300" y="140" width="60" height="30" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
