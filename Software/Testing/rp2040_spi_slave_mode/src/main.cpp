@@ -67,7 +67,7 @@ void loop() {
     Serial1.println("CRC invalido");
     return;
   }
-
+  
   // Reconstruir
   int16_t v1 = (int16_t)(payload[0] | (payload[1] << 8));
   int16_t v2 = (int16_t)(payload[2] | (payload[3] << 8));
