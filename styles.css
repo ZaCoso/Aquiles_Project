@@ -1799,17 +1799,25 @@ body::before {
 }
 
 
-/* Media query específica para 789px a 895px - 2 columnas con sponsor 9 centrado del mismo tamaño */
+/* Media query específica para 789px a 895px - 2 columnas con último sponsor centrado del mismo tamaño */
 @media (min-width: 789px) and (max-width: 895px) {
   .sponsors-grid {
     grid-template-columns: repeat(2, 1fr);
   }
   
-  /* Hacer que el último sponsor esté centrado pero con el mismo tamaño que los otros */
-  .sponsor-card[style*="grid-column: 1 / -1"] {
+  /* Para el último sponsor cuando hay cantidad impar - centrado */
+  .sponsor-card:nth-last-child(odd):last-child {
     grid-column: 1 / -1 !important;
     justify-self: center !important;
     width: 50% !important;
+    max-width: none !important;
+  }
+  
+  /* Para el último sponsor cuando hay cantidad par - normal */
+  .sponsor-card:nth-last-child(even):last-child {
+    grid-column: span 1 !important;
+    justify-self: stretch !important;
+    width: auto !important;
     max-width: none !important;
   }
 }
