@@ -1711,7 +1711,7 @@ body::before {
 
 .specs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 40px;
 }
 
@@ -1758,7 +1758,7 @@ body::before {
 }
 
 /* Responsive para las nuevas páginas */
-@media (max-width: 1024px) {
+@media (min-width: 789px) and (max-width: 1300px) {
   .componentes-content {
     grid-template-columns: 1fr;
     gap: 40px;
@@ -1778,7 +1778,7 @@ body::before {
   }
 
   .specs-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, 1fr); /* 2 columnas SOLO para 789px-1300px */
   }
 
   .cta-content {
@@ -1791,9 +1791,16 @@ body::before {
   }
 }
 
-@media (max-width: 1024px) {
+/* Media query específica para 788px - una sola columna */
+@media (max-width: 788px) {
+  .specs-grid {
+    grid-template-columns: 1fr; /* Una sola columna en pantallas pequeñas */
+  }
+}
+
+@media (max-width: 1300px) {
   .sponsors-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 2fr;
   }
 
 
@@ -1842,9 +1849,9 @@ body::before {
     grid-template-columns: 1fr;
   }
 
-  .specs-grid {
-    grid-template-columns: 1fr;
-  }
+  /* .specs-grid {
+    grid-template-columns: 1fr; /* Una sola columna en mobile muy pequeño */
+  /* } */
 
   .hero-cta {
     flex-direction: column;
