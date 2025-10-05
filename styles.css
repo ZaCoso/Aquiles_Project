@@ -927,12 +927,35 @@ body {
   }
   .exo-image-container {
     width: 100%; /* Asegurar que el contenedor ocupe todo el ancho */
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
   .exo-main-image,
   img[src*='BACK.png'] {
-    max-width: 90% !important; /* Usar más espacio horizontal */
-    width: 100% !important; /* Forzar que use todo el ancho del contenedor */
+    max-width: 85% !important; /* Reducir un poco para dar espacio a los hotspots */
+    width: auto !important; /* Permitir que mantenga proporciones */
     height: auto !important;
+    object-fit: contain; /* Mantener proporciones */
+  }
+}
+
+/* Media query específica para 560px */
+@media (max-width: 560px) {
+  .exo-image-container {
+    min-height: 450px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .exo-main-image,
+  img[src*='BACK.png'] {
+    max-width: 88% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain;
   }
 }
 
@@ -940,13 +963,74 @@ body {
   .exo-image-container {
     min-height: 400px; /* Reducir altura mínima en pantallas muy pequeñas */
     width: 100%; /* Asegurar que el contenedor ocupe todo el ancho */
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
   
   .exo-main-image,
   img[src*='BACK.png'] {
-    max-width: 95% !important; /* Usar casi todo el ancho disponible */
-    width: 100% !important; /* Forzar que use todo el ancho del contenedor */
+    max-width: 90% !important; /* Usar casi todo el ancho disponible pero mantener proporciones */
+    width: auto !important; /* Permitir que mantenga proporciones */
     height: auto !important;
+    object-fit: contain; /* Mantener proporciones */
+  }
+}
+
+/* Media query específica para 460px */
+@media (max-width: 460px) {
+  .exo-image-container {
+    min-height: 420px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .exo-main-image,
+  img[src*='BACK.png'] {
+    max-width: 89% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain;
+  }
+}
+
+/* Media query específica para 400px */
+@media (max-width: 400px) {
+  .exo-image-container {
+    min-height: 400px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .exo-main-image,
+  img[src*='BACK.png'] {
+    max-width: 90.5% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain;
+  }
+}
+
+/* Media query específica para 360px */
+@media (max-width: 360px) {
+  .exo-image-container {
+    min-height: 380px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .exo-main-image,
+  img[src*='BACK.png'] {
+    max-width: 92% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain;
   }
 }
 

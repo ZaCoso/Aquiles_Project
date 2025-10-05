@@ -917,7 +917,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor: { top: "27%", left: "28%"  },
       motor: { top: "40%", left: "76%" },
       regulador: { top: "80%", left: "38%" },
-      volver: { top: "89%", left: "80%" }
+      volver: { top: "87%", left: "80%" }
   };
   var positionsBack = {
       ia:  { top: "24%", left: "34%" },
@@ -925,7 +925,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor: { top: "60%", left: "20%" },
       motor: { top: "32%", left: "16%" },
       regulador: { top: "79%", left: "44%" },
-      volver: { top: "89%", left: "80%" }
+      volver: { top: "87%", left: "80%" }
   };
 
   // ========================================
@@ -934,56 +934,92 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // 📱 POSICIONES PARA PANTALLAS DE 805px Y MENOR
   var positionsFrontMobile = {
-      ia:        { top: "25%", left: "1%" },  // IA - AJUSTA: top (más alto=menor%, más bajo=mayor%), left (izquierda=menor%, derecha=mayor%)
-      bateria:   { top: "14%", left: "60%" }, // BATERÍA - AJUSTA: top y left según necesites
-      sensor:    { top: "26%", left: "33%" }, // SENSOR - AJUSTA: top y left según necesites
-      motor:     { top: "40%", left: "70%" }, // MOTOR - AJUSTA: top y left según necesites
-      regulador: { top: "78%", left: "42%" }, // REGULADOR - AJUSTA: top y left según necesites
-      volver:    { top: "85%", left: "80%" }  // VOLVER - AJUSTA: top y left según necesites
+      ia:        { top: "25%", left: "1%" },      // -
+      bateria:   { top: "15%", left: "65%" },     // XXX
+      sensor:    { top: "27%", left: "28%" },     // 
+      motor:     { top: "40%", left: "70%" },     // 
+      regulador: { top: "85.5%", left: "57.3%" }, // XXX
+      volver:    { top: "90%", left: "73%" }      // 
   };
   var positionsBackMobile = {
-      ia:        { top: "22%", left: "37%" }, // IA (BACK) - AJUSTA: top y left según necesites
-      bateria:   { top: "17%", left: "72%" }, // BATERÍA (BACK) - AJUSTA: top y left según necesites
-      sensor:    { top: "60%", left: "25%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
-      motor:     { top: "32%", left: "24%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
-      regulador: { top: "80%", left: "44%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
-      volver:    { top: "85%", left: "80%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+      ia:        { top: "22%", left: "37%" }, // XXX
+      bateria:   { top: "17%", left: "74%" }, // XXX
+      sensor:    { top: "60%", left: "25%" }, // -
+      motor:     { top: "33%", left: "22%" }, // XXX
+      regulador: { top: "85%", left: "36%" }, // XXX
+      volver:    { top: "90%", left: "73%" }  // 
   };
 
   // 📱 POSICIONES PARA PANTALLAS DE 560px
   var positionsFront560 = {
-      ia:        { top: "23%", left: "1%" }, // IA - AJUSTA: top y left según necesites
-      bateria:   { top: "13%", left: "58%" }, // BATERÍA - AJUSTA: top y left según necesites
-      sensor:    { top: "25%", left: "30%" }, // SENSOR - AJUSTA: top y left según necesites
-      motor:     { top: "38%", left: "72%" }, // MOTOR - AJUSTA: top y left según necesites
-      regulador: { top: "76%", left: "40%" }, // REGULADOR - AJUSTA: top y left según necesites
-      volver:    { top: "83%", left: "80%" }  // VOLVER - AJUSTA: top y left según necesites
+      ia:        { top: "23%", left: "1%" },    // -
+      bateria:   { top: "15%", left: "61%" },   // 
+      sensor:    { top: "26%", left: "29.5%" },   // XXX
+      motor:     { top: "39.5%", left: "72%" }, // XXX
+      regulador: { top: "85%", left: "57.5%" }, // XXX
+      volver:    { top: "90%", left: "70%" }    // 
   };
   var positionsBack560 = {
-      ia:        { top: "21%", left: "40%" }, // IA (BACK) - AJUSTA: top y left según necesites
-      bateria:   { top: "16%", left: "75%" }, // BATERÍA (BACK) - AJUSTA: top y left según necesites
-      sensor:    { top: "58%", left: "22%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
-      motor:     { top: "30%", left: "18%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
-      regulador: { top: "78%", left: "42%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
-      volver:    { top: "83%", left: "80%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+      ia:        { top: "24%", left: "34%" }, // XXX
+      bateria:   { top: "17%", left: "74%" }, // XXX
+      sensor:    { top: "58%", left: "22%" }, // -
+      motor:     { top: "33%", left: "20%" }, // XXXX
+      regulador: { top: "83%", left: "36%" }, // XXX
+      volver:    { top: "90%", left: "70%" }  // 
+  };
+
+  // 📱 POSICIONES PARA PANTALLAS DE 460px
+  var positionsFront460 = {
+      ia:        { top: "22%", left: "1%" },  // -
+      bateria:   { top: "18%", left: "61%" }, // XXX
+      sensor:    { top: "28%", left: "28.5%" }, // XXX
+      motor:     { top: "41%", left: "71%" }, // XXX
+      regulador: { top: "79%", left: "57%" }, // XXX
+      volver:    { top: "90%", left: "65%" }  // 
+  };
+  var positionsBack460 = {
+      ia:        { top: "25%", left: "33%" },   // XXX
+      bateria:   { top: "21%", left: "74%" },   // XXX
+      sensor:    { top: "57%", left: "20%" },   // -
+      motor:     { top: "34.5%", left: "19%" }, // XXX
+      regulador: { top: "78%", left: "35%" },   // XXX
+      volver:    { top: "90%", left: "65%" }    // 
+  };
+
+  // 📱 POSICIONES PARA PANTALLAS DE 400px
+  var positionsFront400 = {
+      ia:        { top: "21.5%", left: "1%" },    // -
+      bateria:   { top: "22%", left: "61%" },     // XXX
+      sensor:    { top: "31%", left: "27.5%" },   // XXX
+      motor:     { top: "41.5%", left: "71%" },   // XXX
+      regulador: { top: "76%", left: "56%" },     // XXX
+      volver:    { top: "90%", left: "65%" }    // 
+  };
+  var positionsBack400 = {
+      ia:        { top: "28%", left: "31%" },     // XXX
+      bateria:   { top: "25%", left: "75%" },     // XXX
+      sensor:    { top: "56.5%", left: "19.5%" }, // -
+      motor:     { top: "36%", left: "18%" },     // XXX
+      regulador: { top: "73%", left: "35%" },     // XXX
+      volver:    { top: "90%", left: "65%" }    // 
   };
 
   // 📱 POSICIONES PARA PANTALLAS DE 360px
   var positionsFront360 = {
-      ia:        { top: "21%", left: "1%" }, // IA - AJUSTA: top y left según necesites
-      bateria:   { top: "11%", left: "55%" }, // BATERÍA - AJUSTA: top y left según necesites
-      sensor:    { top: "23%", left: "27%" }, // SENSOR - AJUSTA: top y left según necesites
-      motor:     { top: "36%", left: "74%" }, // MOTOR - AJUSTA: top y left según necesites
-      regulador: { top: "74%", left: "38%" }, // REGULADOR - AJUSTA: top y left según necesites
-      volver:    { top: "81%", left: "80%" }  // VOLVER - AJUSTA: top y left según necesites
+      ia:        { top: "21%", left: "1%" },    // -
+      bateria:   { top: "23%", left: "60.5%" }, // XXX
+      sensor:    { top: "32%", left: "27.5%" }, //XXX 
+      motor:     { top: "41.5%", left: "70%" }, // XXX
+      regulador: { top: "74%", left: "56%" },   // XXX
+      volver:    { top: "90%", left: "58%" }    // 
   };
   var positionsBack360 = {
-      ia:        { top: "19%", left: "42%" }, // IA (BACK) - AJUSTA: top y left según necesites
-      bateria:   { top: "14%", left: "78%" }, // BATERÍA (BACK) - AJUSTA: top y left según necesites
-      sensor:    { top: "56%", left: "19%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
-      motor:     { top: "28%", left: "15%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
-      regulador: { top: "76%", left: "40%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
-      volver:    { top: "81%", left: "80%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+      ia:        { top: "29%", left: "30%" },   // XXX
+      bateria:   { top: "26%", left: "74%" },   // XXX
+      sensor:    { top: "50%", left: "19%" },   // -
+      motor:     { top: "36.5%", left: "17%" }, // XXX
+      regulador: { top: "73%", left: "35%" },   // XXX
+      volver:    { top: "90%", left: "58%" }    // 
   };
 
   // ========================================
@@ -996,6 +1032,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (screenWidth <= 360) {
       return positionsFront360;        // Para pantallas ≤ 360px
+    } else if (screenWidth <= 400) {
+      return positionsFront400;        // Para pantallas ≤ 400px
+    } else if (screenWidth <= 460) {
+      return positionsFront460;        // Para pantallas ≤ 460px
     } else if (screenWidth <= 560) {
       return positionsFront560;        // Para pantallas ≤ 560px
     } else if (screenWidth <= 805) {
@@ -1011,6 +1051,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (screenWidth <= 360) {
       return positionsBack360;         // Para pantallas ≤ 360px
+    } else if (screenWidth <= 400) {
+      return positionsBack400;         // Para pantallas ≤ 400px
+    } else if (screenWidth <= 460) {
+      return positionsBack460;         // Para pantallas ≤ 460px
     } else if (screenWidth <= 560) {
       return positionsBack560;         // Para pantallas ≤ 560px
     } else if (screenWidth <= 805) {
@@ -1038,6 +1082,112 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     console.log("Positions updated!");
+  };
+
+  // 🔧 FUNCIÓN DE DEBUGGING MEJORADA - USA ESTA PARA VER QUÉ ESTÁ PASANDO
+  window.debugHotspots = function() {
+    const screenWidth = window.innerWidth;
+    console.log("=== DEBUG HOTSPOTS ===");
+    console.log("Screen width:", screenWidth);
+    console.log("Current side:", currentSide);
+    
+    // Mostrar qué conjunto de posiciones se está usando
+    let activePositions;
+    if (currentSide === 'front') {
+      activePositions = getPositionsFront();
+      console.log("Using FRONT positions");
+    } else {
+      activePositions = getPositionsBack();
+      console.log("Using BACK positions");
+    }
+    
+    console.log("Active positions:", activePositions);
+    
+    // Mostrar las posiciones actuales de cada hotspot
+    const hotspots = ['ia', 'bateria', 'sensor', 'motor', 'regulador', 'volver'];
+    hotspots.forEach(hotspotName => {
+      const hotspot = document.querySelector(`.hotspot[data-feature="${hotspotName}"]`);
+      if (hotspot) {
+        console.log(`${hotspotName.toUpperCase()}:`, {
+          computed: {
+            top: hotspot.style.top,
+            left: hotspot.style.left
+          },
+          expected: activePositions[hotspotName]
+        });
+      }
+    });
+    
+    // Mostrar información de la imagen
+    const exoImg = document.querySelector('.exo-main-image');
+    if (exoImg) {
+      console.log("Image info:", {
+        src: exoImg.src,
+        width: exoImg.offsetWidth,
+        height: exoImg.offsetHeight,
+        naturalWidth: exoImg.naturalWidth,
+        naturalHeight: exoImg.naturalHeight
+      });
+    }
+    
+    console.log("=== END DEBUG ===");
+  };
+
+  // 🔧 FUNCIÓN PARA CAMBIAR POSICIONES EN TIEMPO REAL
+  window.setHotspotPosition = function(hotspotName, top, left) {
+    const hotspot = document.querySelector(`.hotspot[data-feature="${hotspotName}"]`);
+    if (hotspot) {
+      hotspot.style.top = top;
+      hotspot.style.left = left;
+      console.log(`Set ${hotspotName} to: top=${top}, left=${left}`);
+    } else {
+      console.log(`Hotspot ${hotspotName} not found`);
+    }
+  };
+
+  // 🔧 FUNCIÓN PARA ACTUALIZAR POSICIONES EN EL CÓDIGO FUENTE
+  window.updatePositionsInCode = function() {
+    const screenWidth = window.innerWidth;
+    const currentSide = window.currentSide || 'front';
+    
+    console.log("=== ACTUALIZAR POSICIONES EN CÓDIGO ===");
+    console.log(`Screen width: ${screenWidth}px`);
+    console.log(`Current side: ${currentSide}`);
+    
+    let targetPositions;
+    if (screenWidth <= 360) {
+      targetPositions = currentSide === 'front' ? 'positionsFront360' : 'positionsBack360';
+    } else if (screenWidth <= 400) {
+      targetPositions = currentSide === 'front' ? 'positionsFront400' : 'positionsBack400';
+    } else if (screenWidth <= 460) {
+      targetPositions = currentSide === 'front' ? 'positionsFront460' : 'positionsBack460';
+    } else if (screenWidth <= 560) {
+      targetPositions = currentSide === 'front' ? 'positionsFront560' : 'positionsBack560';
+    } else if (screenWidth <= 805) {
+      targetPositions = currentSide === 'front' ? 'positionsFrontMobile' : 'positionsBackMobile';
+    } else {
+      targetPositions = currentSide === 'front' ? 'positionsFront' : 'positionsBack';
+    }
+    
+    console.log(`Target variable: ${targetPositions}`);
+    
+    // Mostrar el código actual para copiar y pegar
+    const hotspots = ['ia', 'bateria', 'sensor', 'motor', 'regulador', 'volver'];
+    console.log(`\n// Código para ${targetPositions}:`);
+    console.log(`var ${targetPositions} = {`);
+    
+    hotspots.forEach((hotspotName, index) => {
+      const hotspot = document.querySelector(`.hotspot[data-feature="${hotspotName}"]`);
+      if (hotspot) {
+        const top = hotspot.style.top;
+        const left = hotspot.style.left;
+        const comma = index < hotspots.length - 1 ? ',' : '';
+        console.log(`    ${hotspotName}: { top: "${top}", left: "${left}" }${comma}`);
+      }
+    });
+    
+    console.log(`};\n`);
+    console.log("=== FIN DEL CÓDIGO ===");
   };
 
   function setHotspotPositions(positions) {
@@ -1111,7 +1261,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Track which side is currently shown
+  // CAMBIA EL LA PRIMERA VISTA, MODO DE PRUEBA 
   let currentSide = 'back';
 
   // Helper to update positions on resize
@@ -1156,17 +1306,17 @@ document.addEventListener('DOMContentLoaded', function() {
           label.innerHTML = '<i class="fa-solid fa-arrow-rotate-left"></i> Dar la vuelta';
       });
 
-      // Set initial positions for back
-      setHotspotPositions(getPositionsBack());
-      updateHotspotVisibility('back');
-      setSpecPanelTransforms(specPanelTransformsBack);
-      currentSide = 'back';
-      // Show IA Adaptativa panel first on initial load
+      // Set initial positions for front
+      setHotspotPositions(getPositionsFront());
+      updateHotspotVisibility('front');
+      setSpecPanelTransforms(specPanelTransformsFront);
+      currentSide = 'front';
+      // Show Modulo de Asistencia Motriz panel first on initial load
       document.querySelectorAll('.spec-panel').forEach(function(panel) {
           panel.classList.remove('active');
       });
-      var iaPanel = document.getElementById('spec-ia');
-      if (iaPanel) iaPanel.classList.add('active');
+      var motorPanel = document.getElementById('spec-motor');
+      if (motorPanel) motorPanel.classList.add('active');
   }
 
   // Detect mobile view and override positions
