@@ -219,38 +219,6 @@ document.addEventListener("DOMContentLoaded", () => {
   })
   // ===== Award optional image toggles =====
   // Lightbox for award images (click image to open, outside or X to close)
-  const lightbox = document.createElement('div')
-  lightbox.className = 'lightbox'
-  lightbox.innerHTML = `
-    <div class="lightbox-overlay"></div>
-    <div class="lightbox-content">
-      <img src="" alt="preview" />
-      <div class="lightbox-close" aria-label="Cerrar">×</div>
-    </div>
-  `
-  document.body.appendChild(lightbox)
-
-  const lbImg = lightbox.querySelector('img')
-  const lbClose = lightbox.querySelector('.lightbox-close')
-  const lbOverlay = lightbox.querySelector('.lightbox-overlay')
-
-  function openLightbox(src) {
-    lbImg.src = src
-    lightbox.classList.add('active')
-  }
-  function closeLightbox() {
-    lightbox.classList.remove('active')
-    lbImg.src = ''
-  }
-  lbClose.addEventListener('click', closeLightbox)
-  lbOverlay.addEventListener('click', closeLightbox)
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeLightbox()
-  })
-
-  document.querySelectorAll('.award-image img').forEach((img) => {
-    img.addEventListener('click', () => openLightbox(img.src))
-  })
 
   // Animación de partículas en el hero
   function createHeroParticles() {
@@ -826,33 +794,6 @@ if (document.readyState === "loading") {
       })
     })
   
-    // Efecto de hover 3D para la imagen del exoesqueleto
-    const exoContainer = document.querySelector(".exo-image-container")
-    if (exoContainer) {
-      exoContainer.addEventListener("mousemove", function (e) {
-        const rect = this.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
-  
-        const centerX = rect.width / 2
-        const centerY = rect.height / 2
-  
-        const deltaX = (x - centerX) / centerX
-        const deltaY = (y - centerY) / centerY
-  
-        const image = this.querySelector(".exo-main-image")
-        if (image) {
-          image.style.transform = `perspective(1000px) rotateY(${deltaX * 5}deg) rotateX(${-deltaY * 5}deg) scale(1.05)`
-        }
-      })
-  
-      exoContainer.addEventListener("mouseleave", function () {
-        const image = this.querySelector(".exo-main-image")
-        if (image) {
-          image.style.transform = "perspective(1000px) rotateY(0deg) rotateX(0deg) scale(1)"
-        }
-      })
-    }
   })
 
 
@@ -962,7 +903,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Define positions for each state
   var positionsFront = {
-      ia:  { top: "25%", left: "75%" },
+      ia:  { top: "25%", left: "80%" },
       bateria: { top: "15%", left: "64%" },
       sensor: { top: "27%", left: "28%"  },
       motor: { top: "40%", left: "76%" },
@@ -978,34 +919,122 @@ document.addEventListener('DOMContentLoaded', function() {
       volver: { top: "85%", left: "85%" }
   };
 
-  // --- MOBILE HOTSPOT POSITIONS ---
+  // ========================================
+  // HOTSPOT POSITIONS - AJUSTA AQUÍ LOS VALORES
+  // ========================================
+  
+  // 📱 POSICIONES PARA PANTALLAS DE 805px Y MENOR
   var positionsFrontMobile = {
-      ia:  { top: "25%", left: "75%" },
-      bateria: { top: "14%", left: "60%" },
-      sensor: { top: "26%", left: "33%" },
-      motor: { top: "40%", left: "70%" },
-      regulador: { top: "78%", left: "42%" },
-      volver: { top: "85%", left: "85%" }
+      ia:        { top: "25%", left: "1%" },  // IA - AJUSTA: top (más alto=menor%, más bajo=mayor%), left (izquierda=menor%, derecha=mayor%)
+      bateria:   { top: "14%", left: "60%" }, // BATERÍA - AJUSTA: top y left según necesites
+      sensor:    { top: "26%", left: "33%" }, // SENSOR - AJUSTA: top y left según necesites
+      motor:     { top: "40%", left: "70%" }, // MOTOR - AJUSTA: top y left según necesites
+      regulador: { top: "78%", left: "42%" }, // REGULADOR - AJUSTA: top y left según necesites
+      volver:    { top: "85%", left: "85%" }  // VOLVER - AJUSTA: top y left según necesites
   };
   var positionsBackMobile = {
-      ia:  { top: "22%", left: "37%" },
-      bateria: { top: "17%", left: "72%" },
-      sensor: { top: "60%", left: "25%" },
-      motor: { top: "32%", left: "24%" },
-      regulador: { top: "80%", left: "44%" },
-      volver: { top: "85%", left: "85%" }
+      ia:        { top: "22%", left: "37%" }, // IA (BACK) - AJUSTA: top y left según necesites
+      bateria:   { top: "17%", left: "72%" }, // BATERÍA (BACK) - AJUSTA: top y left según necesites
+      sensor:    { top: "60%", left: "25%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
+      motor:     { top: "32%", left: "24%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
+      regulador: { top: "80%", left: "44%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
+      volver:    { top: "85%", left: "85%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
   };
 
-  // Helper to always use mobile positions on mobile
+  // 📱 POSICIONES PARA PANTALLAS DE 560px
+  var positionsFront560 = {
+      ia:        { top: "23%", left: "1%" }, // IA - AJUSTA: top y left según necesites
+      bateria:   { top: "13%", left: "58%" }, // BATERÍA - AJUSTA: top y left según necesites
+      sensor:    { top: "25%", left: "30%" }, // SENSOR - AJUSTA: top y left según necesites
+      motor:     { top: "38%", left: "72%" }, // MOTOR - AJUSTA: top y left según necesites
+      regulador: { top: "76%", left: "40%" }, // REGULADOR - AJUSTA: top y left según necesites
+      volver:    { top: "83%", left: "87%" }  // VOLVER - AJUSTA: top y left según necesites
+  };
+  var positionsBack560 = {
+      ia:        { top: "21%", left: "40%" }, // IA (BACK) - AJUSTA: top y left según necesites
+      bateria:   { top: "16%", left: "75%" }, // BATERÍA (BACK) - AJUSTA: top y left según necesites
+      sensor:    { top: "58%", left: "22%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
+      motor:     { top: "30%", left: "18%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
+      regulador: { top: "78%", left: "42%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
+      volver:    { top: "83%", left: "87%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+  };
+
+  // 📱 POSICIONES PARA PANTALLAS DE 360px
+  var positionsFront360 = {
+      ia:        { top: "21%", left: "1%" }, // IA - AJUSTA: top y left según necesites
+      bateria:   { top: "11%", left: "55%" }, // BATERÍA - AJUSTA: top y left según necesites
+      sensor:    { top: "23%", left: "27%" }, // SENSOR - AJUSTA: top y left según necesites
+      motor:     { top: "36%", left: "74%" }, // MOTOR - AJUSTA: top y left según necesites
+      regulador: { top: "74%", left: "38%" }, // REGULADOR - AJUSTA: top y left según necesites
+      volver:    { top: "81%", left: "89%" }  // VOLVER - AJUSTA: top y left según necesites
+  };
+  var positionsBack360 = {
+      ia:        { top: "19%", left: "42%" }, // IA (BACK) - AJUSTA: top y left según necesites
+      bateria:   { top: "14%", left: "78%" }, // BATERÍA (BACK) - AJUSTA: top y left según necesites
+      sensor:    { top: "56%", left: "19%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
+      motor:     { top: "28%", left: "15%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
+      regulador: { top: "76%", left: "40%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
+      volver:    { top: "81%", left: "89%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+  };
+
+  // ========================================
+  // FUNCIONES PARA SELECCIONAR POSICIONES
+  // ========================================
+  
+  // Selecciona las posiciones front según el ancho de pantalla
   function getPositionsFront() {
-    return window.innerWidth <= 700 ? positionsFrontMobile : positionsFront;
-  }
-  function getPositionsBack() {
-    return window.innerWidth <= 700 ? positionsBackMobile : positionsBack;
+    const screenWidth = window.innerWidth;
+    
+    if (screenWidth <= 360) {
+      return positionsFront360;        // Para pantallas ≤ 360px
+    } else if (screenWidth <= 560) {
+      return positionsFront560;        // Para pantallas ≤ 560px
+    } else if (screenWidth <= 805) {
+      return positionsFrontMobile;     // Para pantallas ≤ 805px
+    } else {
+      return positionsFront;           // Para pantallas > 805px (desktop)
+    }
   }
 
+  // Selecciona las posiciones back según el ancho de pantalla
+  function getPositionsBack() {
+    const screenWidth = window.innerWidth;
+    
+    if (screenWidth <= 360) {
+      return positionsBack360;         // Para pantallas ≤ 360px
+    } else if (screenWidth <= 560) {
+      return positionsBack560;         // Para pantallas ≤ 560px
+    } else if (screenWidth <= 805) {
+      return positionsBackMobile;      // Para pantallas ≤ 805px
+    } else {
+      return positionsBack;            // Para pantallas > 805px (desktop)
+    }
+  }
+
+  // Función para forzar actualización de posiciones - LLAMA ESTO DESDE LA CONSOLA
+  window.forceUpdatePositions = function() {
+    console.log("Current screen width:", window.innerWidth);
+    console.log("Current side:", currentSide);
+    
+    const frontPositions = getPositionsFront();
+    const backPositions = getPositionsBack();
+    
+    console.log("Front positions:", frontPositions);
+    console.log("Back positions:", backPositions);
+    
+    if (currentSide === 'front') {
+      setHotspotPositions(frontPositions);
+    } else {
+      setHotspotPositions(backPositions);
+    }
+    
+    console.log("Positions updated!");
+  };
+
   function setHotspotPositions(positions) {
+      console.log("Setting positions:", positions); // DEBUG
       if (hotspotIA) {
+          console.log("Setting IA to:", positions.ia); // DEBUG
           hotspotIA.style.top = positions.ia.top;
           hotspotIA.style.left = positions.ia.left;
       }
@@ -1133,17 +1162,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Detect mobile view and override positions
   function isMobile() {
-    return window.innerWidth <= 700;
+    return window.innerWidth <= 805;
   }
   if (isMobile()) {
-    positionsFront = positionsFrontMobile;
-    positionsBack = positionsBackMobile;
+    positionsFront = getPositionsFront();
+    positionsBack = getPositionsBack();
   }
 
-  let lastIsMobile = window.innerWidth <= 700;
+  let lastIsMobile = window.innerWidth <= 805;
 
   function handleResponsiveChange() {
-    const nowIsMobile = window.innerWidth <= 700;
+    const nowIsMobile = window.innerWidth <= 805;
     if (nowIsMobile !== lastIsMobile) {
       // Update positions and visibility for the current side
       if (currentSide === 'front') {
@@ -1300,6 +1329,40 @@ document.addEventListener('DOMContentLoaded', () => {
   initMobileCue();
   initSponsorsCarousel();
   moveImageToTopOnMobile();
+  
+  // ===== Lightbox for award images =====
+  const lightbox = document.createElement('div')
+  lightbox.className = 'lightbox'
+  lightbox.innerHTML = `
+    <div class="lightbox-overlay"></div>
+    <div class="lightbox-content">
+      <img src="" alt="preview" />
+      <div class="lightbox-close" aria-label="Cerrar">×</div>
+    </div>
+  `
+  document.body.appendChild(lightbox)
+
+  const lbImg = lightbox.querySelector('img')
+  const lbClose = lightbox.querySelector('.lightbox-close')
+  const lbOverlay = lightbox.querySelector('.lightbox-overlay')
+
+  function openLightbox(src) {
+    lbImg.src = src
+    lightbox.classList.add('active')
+  }
+  function closeLightbox() {
+    lightbox.classList.remove('active')
+    lbImg.src = ''
+  }
+  lbClose.addEventListener('click', closeLightbox)
+  lbOverlay.addEventListener('click', closeLightbox)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeLightbox()
+  })
+
+  document.querySelectorAll('.award-image img').forEach((img) => {
+    img.addEventListener('click', () => openLightbox(img.src))
+  })
 });
 
 // ===== MOBILE IMAGE POSITIONING =====

@@ -816,7 +816,7 @@ body {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1000px) {
   .hero-title-new {
     font-size: 3rem;
   }
@@ -954,13 +954,17 @@ body::before {
   z-index: -1;
 }
 
-/* Estilos específicos para las páginas Sponsors y Aquiles A1 */
+/*Sponsors y Aquiles A1 */
 
-/* Page Header (usado en ambas páginas) */
+/* Page Header (usado en CASI TODAS las páginas) */
 .page-header {
   padding: 100px 0 50px;
   text-align: center;
   background: linear-gradient(135deg, var(--color-darker-blue) 0%, var(--color-dark-blue) 100%);
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
+  /* DUDA */
+  /* color: var(--color-neon-teal);
+  border: 1px solid rgba(140, 203, 213, 0.4); */
 }
 
 .page-header h1 {
@@ -980,6 +984,7 @@ body::before {
   padding: 80px 0;
   position: relative;
   overflow: hidden;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .sponsors-grid {
@@ -1089,8 +1094,7 @@ body::before {
   background: linear-gradient(135deg, rgba(16, 32, 48, 0.9) 0%, rgba(41, 91, 98, 0.8) 100%);
   position: relative;
   overflow: hidden;
-  margin: 40px 0;
-  border-radius: 20px;
+  /* margin-bottom: 60px; DUDA */
 }
 
 .sponsor-cta::before {
@@ -1304,7 +1308,7 @@ body::before {
 
 /* A1 Hero Section */
 .a1-hero {
-  
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
   position: relative;
   overflow: hidden;
 }
@@ -1416,8 +1420,9 @@ body::before {
   position: relative;
   overflow: hidden;
   background-color: rgba(16, 32, 48, 0.5);
-  border-radius: 20px;
-  margin: 40px 0;
+  /* border-radius: 20px; */
+  /* margin-top: 40px; */
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .funcionamiento-grid {
@@ -1701,8 +1706,7 @@ body::before {
   position: relative;
   overflow: hidden;
   background-color: rgba(16, 32, 48, 0.5);
-  border-radius: 20px;
-  margin: 40px 0;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .specs-grid {
@@ -1878,7 +1882,7 @@ body::before {
 
 .container {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1700px;
   margin: 0 auto;
   padding: 0 20px;
   position: relative;
@@ -3315,7 +3319,7 @@ img {
   }
 }
 
-@media (max-width: 805px) {
+@media (max-width: 1000px) {
   .header-content {
     height: 70px;
     position: relative;
@@ -3477,6 +3481,7 @@ img {
 
 .about-history {
   padding: 60px 0;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .about-card {
@@ -3541,6 +3546,7 @@ img {
 /* Equipo */
 .team {
   padding: 60px 0;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .team h2 {
@@ -3754,6 +3760,8 @@ img {
 /* Página de Reconocimientos */
 .awards {
   padding: 60px 0;
+  box-shadow: inset 0 0 100px rgba(140, 203, 213, 0.1);
+
 }
 
 .awards-timeline {
@@ -3769,7 +3777,7 @@ img {
   left: 50%;
   transform: translateX(-50%);
   width: 2px;
-  height: 104%;
+  height: 101%;
   background-color: rgba(140, 203, 213, 0.6); /* más vívido */
   z-index: 1;
 }
@@ -3830,10 +3838,10 @@ img {
 .award-icon {
   position: absolute;
   /* AJUSTADOR de ICONO */
-  top: 22px;
-  left: 25px;
-  width: 50px;
-  height: 50px;
+  top: 17px;
+  left: 15px;
+  width: 60px;
+  height: 60px;
   background-color: rgba(140, 203, 213, 0.1);
   border-radius: 50%;
   display: flex;
@@ -3847,6 +3855,47 @@ img {
   transition: all 0.3s ease;
   z-index: 1;
 }
+.award-iconimpa {
+  position: absolute;
+  /* AJUSTADOR de ICONO */
+  top: 17px;
+  left: 15px;
+  width: 60px;
+  height: 60px;
+  background-color: rgba(140, 203, 213, 0.09);
+  border-radius: 25%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 20px;
+  color: var(--color-neon-teal);
+  font-size: 20px;
+  flex-shrink: 0;
+  box-shadow:  0px 0px 15px rgba(140, 203, 213, 0.4);
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+/* Estilos específicos para la imagen dentro del contenedor rectangular */
+.award-iconimpa img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 8%;
+  transition: all 0.3s ease;
+}
+
+/* Hover effect para la imagen rectangular */
+.award-item:hover .award-iconimpa {
+  background-color: rgba(140, 203, 213, 0.1);
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(140, 203, 213, 0.3);
+}
+
+.award-item:hover .award-iconimpa img {
+  transform: scale(1.05);
+}
+
 
 .award-item:hover .award-icon {
   background-color: rgba(140, 203, 213, 0.2);
@@ -3857,7 +3906,8 @@ img {
 .award-title-indent {
   text-indent: 60px; /* SANGRIA*/
   margin-right: -30px; 
-  line-height: 2.2;
+  margin-bottom: 10px;
+  line-height: 2.6;
 }
 
 .award-header {
@@ -3904,7 +3954,7 @@ img {
 .award-image {
   display: flex;
   justify-content: center;
-  margin-top: 16px;
+  /* margin-top: 16px; */
 }
 
 .award-image.open {
@@ -3912,19 +3962,25 @@ img {
 }
 
 .award-image {
-  margin-top: 20px;
+  margin-top: 20px; /* margin real */
 }
 
 .award-image img {
-  width: 100%;
-  max-width: 420px;
+  width: auto;
+  max-width: 380px;
   max-height: 300px;
   height: auto;
   border-radius: 10px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 10px 25px rgba(140, 203, 213, 0.4);
   border: 1px solid rgba(140, 203, 213, 0.2);
   cursor: pointer;
   border-radius: 2rem 2rem 2rem 2rem;
+  object-fit: contain;
+}
+
+/* Clase específica para imágenes sin border-radius */
+.award-image-no-radius img {
+  border-radius: 0px !important;
 }
 
 .award-image-toggle {
@@ -3949,7 +4005,7 @@ img {
 /* MOBILE VIEW de awards */
 
 
-@media (max-width: 768px) {
+@media (max-width: 1000px) {
   .award-item {
     width: 100%;
     margin-left: 0;
@@ -4002,9 +4058,32 @@ img {
     left: 15px; /* AJUSTADOR de ICONO en MOBILE */
     
   }
+  
+  /* Estilos responsive para award-iconimpa en mobile */
+  .award-iconimpa {
+    top: 12px; /* AJUSTADOR de ICONO en MOBILE */
+    left: 10px; /* AJUSTADOR de ICONO en MOBILE */
+    width: 55px; /* Más pequeño en mobile */
+    height: 55px;
+  }
+  
+  /* Asegurar que la imagen se vea bien en mobile */
+  .award-iconimpa img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* Estilos para award-image en mobile */
+  .award-image img {
+    max-width: 100%;
+    max-height: 250px; /* Ligeramente más pequeño en mobile */
+    width: auto;
+    height: auto;
+  }
 
   .award-title-indent {
-    line-height: 2.5;
+    line-height: 2.8;
   }
   
   .award-content h3 {
@@ -4025,6 +4104,8 @@ img {
 
 .certifications {
   padding: 60px 0;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
+
 }
 
 .cert-card {
@@ -4109,6 +4190,8 @@ img {
 /* Página de Galería */
 .gallery {
   padding: 60px 0;
+  box-shadow: inset 0 0 100px rgba(140, 203, 213, 0.1);
+
 }
 
 .gallery-grid {
@@ -4157,6 +4240,7 @@ img {
 /* Página de Contacto */
 .contact-form {
   padding: 60px 0;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .form-container {
@@ -4304,7 +4388,7 @@ img {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1000px) {
   .spec-tabs {
     flex-wrap: nowrap;
     justify-content: space-between;
@@ -4410,17 +4494,20 @@ img {
 
 .lightbox-content {
   position: relative;
-  max-width: 70vw;
-  max-height: 70vh;
+  max-width: 95vw;
+  max-height: 95vh;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
+  padding: 20px;
 }
 
 .lightbox-content img {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
@@ -4536,11 +4623,28 @@ img {
   opacity: 1;
 }
 
-/* Mobile responsive */
-@media (max-width: 768px) {
+/* Desktop specific styles for tall images */
+@media (min-width: 1001px) {
   .lightbox-content {
     max-width: 95vw;
     max-height: 95vh;
+    padding: 30px;
+  }
+  
+  .lightbox-content img {
+    max-width: 100%;
+    max-height: calc(95vh - 60px); /* Resta el padding */
+    width: auto;
+    height: auto;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 1000px) {
+  .lightbox-content {
+    max-width: 98vw;
+    max-height: 98vh;
+    padding: 10px;
   }
 
   .lightbox-close,
@@ -4654,7 +4758,7 @@ img {
 }
 
 /* Mobile responsive */
-@media (max-width: 768px) {
+@media (max-width: 1000px) {
   .sponsors-title {
     font-size: 2rem;
     margin-bottom: 30px;
@@ -4774,7 +4878,7 @@ img {
 }
 
 /* Hide cue on desktop */
-@media (min-width: 769px) {
+@media (min-width: 1001px) {
   .mobile-cue {
     display: none;
   }
@@ -4800,9 +4904,10 @@ img {
 /* Mapa impa */
 
 .map-container {
-  margin: 40px 0;
   position: relative;
-  padding: 0 20px;
+  padding: 0 70px;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
+  
 }
 
 .map-header {
