@@ -1001,6 +1001,16 @@ body::before {
   margin-bottom: 60px;
 }
 
+/* Cuando el grid está en modo de 2 columnas (895px a 1335px), centrar el último sponsor */
+@media (min-width: 895px) and (max-width: 1335px) {
+  .sponsors-grid .sponsor-card:last-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: 100%;
+    max-width: 600px;
+  }
+}
+
 .sponsor-card {
   background-color: rgba(16, 32, 48, 0.7);
   padding: 40px;
@@ -1125,6 +1135,22 @@ body::before {
   z-index: 1;
 }
 
+/* Mover la sección ¡Contáctanos! hacia abajo cuando la pantalla sea menor a 895px */
+@media (max-width: 894px) {
+  .cta-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+  
+  .cta-text {
+    order: 1;
+  }
+  
+  .cta-action {
+    order: 2;
+  }
+}
+
 
 .cta-text h2 {
   font-size: 2.5rem;
@@ -1143,6 +1169,13 @@ body::before {
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-top: 30px;
+}
+
+/* Hacer que benefit-item sea una sola columna cuando la pantalla sea menor a 440px */
+@media (max-width: 439px) {
+  .benefits-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .benefit-item {
@@ -1776,7 +1809,7 @@ body::before {
   }
   
   /* Hacer que el último sponsor tenga el mismo tamaño que los otros en una sola columna */
-  .sponsor-card[style*="grid-column: 1 / -1"] {
+  .sponsor-card:last-child {
     grid-column: 1 !important;
     justify-self: stretch !important;
     width: auto !important;
