@@ -745,8 +745,7 @@ if (document.readyState === "loading") {
   
   // Funcionalidad para los hotspots del exoesqueleto
   document.addEventListener("DOMContentLoaded", () => {
-    // Inicializar el primer panel como activo
-    document.getElementById("spec-ia").classList.add("active")
+    // El panel IA ya está activo por defecto en el HTML para la vista back
   
       // Manejar clics en los hotspots
   const hotspots = document.querySelectorAll(".hotspot")
@@ -908,7 +907,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor: { top: "27%", left: "28%"  },
       motor: { top: "40%", left: "76%" },
       regulador: { top: "80%", left: "38%" },
-      volver: { top: "85%", left: "85%" }
+      volver: { top: "89%", left: "80%" }
   };
   var positionsBack = {
       ia:  { top: "24%", left: "34%" },
@@ -916,7 +915,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor: { top: "60%", left: "20%" },
       motor: { top: "32%", left: "16%" },
       regulador: { top: "79%", left: "44%" },
-      volver: { top: "85%", left: "85%" }
+      volver: { top: "89%", left: "80%" }
   };
 
   // ========================================
@@ -930,7 +929,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor:    { top: "26%", left: "33%" }, // SENSOR - AJUSTA: top y left según necesites
       motor:     { top: "40%", left: "70%" }, // MOTOR - AJUSTA: top y left según necesites
       regulador: { top: "78%", left: "42%" }, // REGULADOR - AJUSTA: top y left según necesites
-      volver:    { top: "85%", left: "85%" }  // VOLVER - AJUSTA: top y left según necesites
+      volver:    { top: "85%", left: "80%" }  // VOLVER - AJUSTA: top y left según necesites
   };
   var positionsBackMobile = {
       ia:        { top: "22%", left: "37%" }, // IA (BACK) - AJUSTA: top y left según necesites
@@ -938,7 +937,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor:    { top: "60%", left: "25%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
       motor:     { top: "32%", left: "24%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
       regulador: { top: "80%", left: "44%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
-      volver:    { top: "85%", left: "85%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+      volver:    { top: "85%", left: "80%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
   };
 
   // 📱 POSICIONES PARA PANTALLAS DE 560px
@@ -948,7 +947,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor:    { top: "25%", left: "30%" }, // SENSOR - AJUSTA: top y left según necesites
       motor:     { top: "38%", left: "72%" }, // MOTOR - AJUSTA: top y left según necesites
       regulador: { top: "76%", left: "40%" }, // REGULADOR - AJUSTA: top y left según necesites
-      volver:    { top: "83%", left: "87%" }  // VOLVER - AJUSTA: top y left según necesites
+      volver:    { top: "83%", left: "80%" }  // VOLVER - AJUSTA: top y left según necesites
   };
   var positionsBack560 = {
       ia:        { top: "21%", left: "40%" }, // IA (BACK) - AJUSTA: top y left según necesites
@@ -956,7 +955,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor:    { top: "58%", left: "22%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
       motor:     { top: "30%", left: "18%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
       regulador: { top: "78%", left: "42%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
-      volver:    { top: "83%", left: "87%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+      volver:    { top: "83%", left: "80%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
   };
 
   // 📱 POSICIONES PARA PANTALLAS DE 360px
@@ -966,7 +965,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor:    { top: "23%", left: "27%" }, // SENSOR - AJUSTA: top y left según necesites
       motor:     { top: "36%", left: "74%" }, // MOTOR - AJUSTA: top y left según necesites
       regulador: { top: "74%", left: "38%" }, // REGULADOR - AJUSTA: top y left según necesites
-      volver:    { top: "81%", left: "89%" }  // VOLVER - AJUSTA: top y left según necesites
+      volver:    { top: "81%", left: "80%" }  // VOLVER - AJUSTA: top y left según necesites
   };
   var positionsBack360 = {
       ia:        { top: "19%", left: "42%" }, // IA (BACK) - AJUSTA: top y left según necesites
@@ -974,7 +973,7 @@ document.addEventListener('DOMContentLoaded', function() {
       sensor:    { top: "56%", left: "19%" }, // SENSOR (BACK) - AJUSTA: top y left según necesites
       motor:     { top: "28%", left: "15%" }, // MOTOR (BACK) - AJUSTA: top y left según necesites
       regulador: { top: "76%", left: "40%" }, // REGULADOR (BACK) - AJUSTA: top y left según necesites
-      volver:    { top: "81%", left: "89%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
+      volver:    { top: "81%", left: "80%" }  // VOLVER (BACK) - AJUSTA: top y left según necesites
   };
 
   // ========================================
@@ -1079,18 +1078,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Define transform positions for each panel on front and back
   const specPanelTransformsFront = {
-    'spec-motor': 'translateY(25%)',
-    'spec-ia': 'translateY(30%)',
-    'spec-bateria': 'translateY(0%)',
-    'spec-sensor': 'translateY(0%)',
-    'spec-regulador': 'translateY(100%)'
+    'spec-motor': 'translateY(10%)',
+    'spec-ia': 'translateY(10%)',
+    'spec-bateria': 'translateY(10%)',
+    'spec-sensor': 'translateY(10%)',
+    'spec-regulador': 'translateY(10%)'
   };
   const specPanelTransformsBack = {
-    'spec-ia': 'translateY(0%)',
-    'spec-motor': 'translateY(0%)',
-    'spec-bateria': 'translateY(0%)',
-    'spec-sensor': 'translateY(132%)',
-    'spec-regulador': 'translateY(100%)'
+    'spec-ia': 'translateY(10%)',
+    'spec-motor': 'translateY(10%)',
+    'spec-bateria': 'translateY(10%)',
+    'spec-sensor': 'translateY(10%)',
+    'spec-regulador': 'translateY(10%)'
   };
 
   function setSpecPanelTransforms(transforms) {
@@ -1103,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Track which side is currently shown
-  let currentSide = 'front';
+  let currentSide = 'back';
 
   // Helper to update positions on resize
   function updateHotspotPositionsOnResize() {
@@ -1144,20 +1143,20 @@ document.addEventListener('DOMContentLoaded', function() {
               var motorPanel = document.getElementById('spec-motor');
               if (motorPanel) motorPanel.classList.add('active');
           }
-          label.innerHTML = '<i class="fas fa-arrow-left"></i> Dar la vuelta';
+          label.innerHTML = '<i class="fa-solid fa-arrow-rotate-left"></i> Dar la vuelta';
       });
 
-      // Set initial positions for front
-      setHotspotPositions(getPositionsFront());
-      updateHotspotVisibility('front');
-      setSpecPanelTransforms(specPanelTransformsFront);
-      currentSide = 'front';
-      // Show Modulo de Asistencia Motriz panel first on initial load
+      // Set initial positions for back
+      setHotspotPositions(getPositionsBack());
+      updateHotspotVisibility('back');
+      setSpecPanelTransforms(specPanelTransformsBack);
+      currentSide = 'back';
+      // Show IA Adaptativa panel first on initial load
       document.querySelectorAll('.spec-panel').forEach(function(panel) {
           panel.classList.remove('active');
       });
-      var motorPanel = document.getElementById('spec-motor');
-      if (motorPanel) motorPanel.classList.add('active');
+      var iaPanel = document.getElementById('spec-ia');
+      if (iaPanel) iaPanel.classList.add('active');
   }
 
   // Detect mobile view and override positions
