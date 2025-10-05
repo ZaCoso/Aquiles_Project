@@ -2492,14 +2492,15 @@ img {
     0 0 0 2px rgba(140, 203, 213, 0.3),
     0 0 25px rgba(140, 203, 213, 0.8),
     0 0 50px rgba(140, 203, 213, 0.4);
-   padding: 6px 6px;
-   border-radius: 6px;
+  padding: 6px 6px;
+  border-radius: 6px;
   width: 100%;
   min-width: fit-content;
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  pointer-events: auto;
 }
 
 #hotspot-volver .hotspot-label:hover {

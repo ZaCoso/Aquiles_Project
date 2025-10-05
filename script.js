@@ -356,6 +356,16 @@ if (document.readyState === "loading") {
         icon.classList.add("fa-bars")
       }
 
+      // Cerrar el menú al hacer clic fuera de él
+      document.addEventListener("click", (e) => {
+        if (mobileMenu.classList.contains("active")) {
+          // Verificar si el clic fue fuera del menú y del botón
+          if (!mobileMenu.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+            closeMobileMenu()
+          }
+        }
+      })
+
       // Cerrar menú al detectar zoom/doble tap en mobile
       function installZoomCloseHandlers() {
         const vv = window.visualViewport
