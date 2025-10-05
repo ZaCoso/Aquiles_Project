@@ -1798,18 +1798,38 @@ body::before {
   }
 }
 
-/* Media query específica para 788px - una sola columna */
+
+/* Media query específica para 789px a 895px - 2 columnas con sponsor 9 centrado del mismo tamaño */
+@media (min-width: 789px) and (max-width: 895px) {
+  .sponsors-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  /* Hacer que el último sponsor esté centrado pero con el mismo tamaño que los otros */
+  .sponsor-card[style*="grid-column: 1 / -1"] {
+    grid-column: 1 / -1 !important;
+    justify-self: center !important;
+    width: 50% !important;
+    max-width: none !important;
+  }
+}
+
+/* Media query específica para menores a 789px - una sola columna */
 @media (max-width: 788px) {
   .specs-grid {
     grid-template-columns: 1fr; /* Una sola columna en pantallas pequeñas */
   }
-}
-
-@media (max-width: 1300px) {
   .sponsors-grid {
-    grid-template-columns: 2fr;
+    grid-template-columns: 1fr; /* Una sola columna en pantallas pequeñas */
   }
-
+  
+  /* Hacer que el último sponsor tenga el mismo tamaño que los otros en una sola columna */
+  .sponsor-card[style*="grid-column: 1 / -1"] {
+    grid-column: 1 !important;
+    justify-self: stretch !important;
+    width: auto !important;
+    max-width: none !important;
+  }
 
   .partnership-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -2492,15 +2512,14 @@ img {
     0 0 0 2px rgba(140, 203, 213, 0.3),
     0 0 25px rgba(140, 203, 213, 0.8),
     0 0 50px rgba(140, 203, 213, 0.4);
-  padding: 6px 6px;
-  border-radius: 6px;
+   padding: 6px 6px;
+   border-radius: 6px;
   width: 100%;
   min-width: fit-content;
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
-  pointer-events: auto;
 }
 
 #hotspot-volver .hotspot-label:hover {
