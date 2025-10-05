@@ -1764,66 +1764,10 @@ body::before {
   font-weight: 600;
 }
 
-/* Responsive para las nuevas páginas */
-@media (min-width: 789px) and (max-width: 1300px) {
-  .componentes-content {
-    grid-template-columns: 1fr;
-    gap: 40px;
-  }
-
-  .a1-hero-content {
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .a1-specs {
-    justify-content: center;
-  }
-
-  .beneficios-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .specs-grid {
-    grid-template-columns: repeat(2, 1fr); /* 2 columnas SOLO para 789px-1300px */
-  }
-
-  .cta-content {
-    grid-template-columns: 1fr;
-    text-align: center;
-  }
-
-  .benefits-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 
-/* Media query específica para 789px a 895px - 2 columnas con último sponsor centrado del mismo tamaño */
-@media (min-width: 789px) and (max-width: 895px) {
-  .sponsors-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  /* Para el último sponsor cuando hay cantidad impar - centrado */
-  .sponsor-card:nth-last-child(odd):last-child {
-    grid-column: 1 / -1 !important;
-    justify-self: center !important;
-    width: 50% !important;
-    max-width: none !important;
-  }
-  
-  /* Para el último sponsor cuando hay cantidad par - normal */
-  .sponsor-card:nth-last-child(even):last-child {
-    grid-column: span 1 !important;
-    justify-self: stretch !important;
-    width: auto !important;
-    max-width: none !important;
-  }
-}
-
-/* Media query específica para menores a 789px - una sola columna */
-@media (max-width: 788px) {
+/* Media query específica para menores a 600px - una sola columna */
+@media (max-width: 599px) {
   .specs-grid {
     grid-template-columns: 1fr; /* Una sola columna en pantallas pequeñas */
   }
@@ -1838,6 +1782,21 @@ body::before {
     width: auto !important;
     max-width: none !important;
   }
+  
+  /* Mover la sección "Contáctanos" al final en mobile */
+  .sponsors-section {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .sponsors-grid {
+    order: 1;
+  }
+  
+  .cta-action {
+    order: 2;
+  }
+
 
   .partnership-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -2528,6 +2487,7 @@ img {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  pointer-events: auto;
 }
 
 #hotspot-volver .hotspot-label:hover {
