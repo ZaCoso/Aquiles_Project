@@ -1,22 +1,22 @@
 # AQUILES - Exoesqueleto de Asistencia Motora
 
 <div align="center">
-  <img src="web/med/1.PNG" alt="Logo Proyecto Aquiles" width="200"/>
+  <img src="web/med/4.png" alt="Logo Proyecto Aquiles" width="200"/>
   <h3>Revolucionando la movilidad humana</h3>
   <p>Exoesqueleto de asistencia motora con inteligencia artificial</p>
   
   <!-- Íconos de redes sociales -->
 <p align="center">
-  <a href="https://www.instagram.com/misaacas" target="_blank" style="text-decoration: none; outline: none;">
+  <a href="https://www.instagram.com/aquiles.project/" target="_blank" style="text-decoration: none; outline: none;">
     <img src="https://img.icons8.com/ios-filled/50/8DD3D7/instagram-new.png" alt="Instagram" width="30" style="border: none; box-shadow: none;"/>
   </a>&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.linkedin.com/in/misael-castillo-0a52a1314/" target="_blank" style="text-decoration: none; outline: none;">
+  <a href="https://www.linkedin.com/company/aquiles-project/" target="_blank" style="text-decoration: none; outline: none;">
     <img src="https://img.icons8.com/ios-filled/50/8DD3D7/linkedin.png" alt="LinkedIn" width="30" style="border: none; box-shadow: none;"/>
   </a>&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.youtube.com/" target="_blank" style="text-decoration: none; outline: none;">
+  <a href="https://youtube.com/@aquilesproject?si=hjGjSXgWbFqAbJPA" target="_blank" style="text-decoration: none; outline: none;">
     <img src="https://img.icons8.com/ios-filled/50/8DD3D7/youtube.png" alt="YouTube" width="30" style="border: none; box-shadow: none;"/>
   </a>&nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://www.tiktok.com/" target="_blank" style="text-decoration: none; outline: none;">
+  <a href="https://www.tiktok.com/@aquilesproject?_t=ZM-90KUI5vwpdj&_r=1" target="_blank" style="text-decoration: none; outline: none;">
     <img src="https://img.icons8.com/ios-filled/50/8DD3D7/tiktok.png" alt="TikTok" width="30" style="border: none; box-shadow: none;"/>
   </a>
 </p>
