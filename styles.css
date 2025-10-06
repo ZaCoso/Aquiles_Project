@@ -2007,6 +2007,17 @@ body::before {
   z-index: 1;
 }
 
+.container1 {
+  width: 100%;
+  max-width: 1700px;
+  margin: 0 auto;
+  padding: 0 20px;
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
+
+}
+
 h1,
 h2,
 h3,
@@ -2796,6 +2807,7 @@ img {
   padding: 100px 0;
   position: relative;
   overflow: hidden;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .app-bg-wrapper {
@@ -3114,6 +3126,7 @@ img {
   text-align: center;
   width: 100%;
   min-width: 320px;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .stat-item {
@@ -4875,7 +4888,7 @@ img {
   padding: 60px 0;
   position: relative;
   overflow: hidden;
-  
+  box-shadow: inset 0 0 100px rgba(140, 203, 213, 0.1);
 }
 
 .sponsors-title {
