@@ -1,39 +1,42 @@
 #include <Wire.h>
-#include <MPU6050_light.h>
+// #include <MPU6050_light.h>
 #include <AS5600.h>
 
-#define SDA_PIN 21
-#define SCL_PIN 22
+#define SDA_PIN 14
+#define SCL_PIN 15
 
-MPU6050 mpu(Wire);   // ✅ Esta sí acepta "Wire"
+// MPU6050 mpu(Wire);   // ✅ Esta sí acepta "Wire"
 AS5600 as5600;
 
 void setup() {
   Serial.begin(115200);
-  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.setSDA(SDA_PIN);
+  Wire.setSCL(SCL_PIN);
+
+  Wire.begin();
   delay(500);
 
   Serial.println("🔍 Inicializando sensores...");
 
-  mpu.begin();
+  // mpu.begin();
   Serial.println("✅ MPU6050 listo");
 
   as5600.begin();
   as5600.setDirection(AS5600_CLOCK_WISE);
   Serial.println("✅ AS5600 listo");
 
-  mpu.calcOffsets();  // opcional pero mejora lectura
+  // mpu.calcOffsets();  // opcional pero mejora lectura
 }
 
 void loop() {
-  mpu.update();
+  // mpu.update();
 
-  Serial.print("Gyro X: ");
-  Serial.print(mpu.getGyroX());
-  Serial.print(" | Y: ");
-  Serial.print(mpu.getGyroY());
-  Serial.print(" | Z: ");
-  Serial.print(mpu.getGyroZ());
+  // Serial.print("Gyro X: ");
+  // Serial.print(mpu.getGyroX());
+  // Serial.print(" | Y: ");
+  // Serial.print(mpu.getGyroY());
+  // Serial.print(" | Z: ");
+  // Serial.print(mpu.getGyroZ());
 
   int angleRaw = as5600.readAngle();
   float degrees = angleRaw * 0.0879;

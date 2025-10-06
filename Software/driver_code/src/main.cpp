@@ -1,13 +1,20 @@
 #include <Arduino.h>
 #include <Wire.h>
+#define Wire Wire1  
 #include <AS5600.h>
 #include <AS5048A.h>
 #include <Adafruit_MPU6050.h>
+#include <Adafruit_NeoPixel.h>
 #include <Adafruit_Sensor.h>
 #include <SimpleFOC.h>
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
 
+#define LED_PIN   16    // RP2040 Zero (Waveshare) suele ser 16
+#define LED_COUNT 1
+
+// ---- Declaración GLOBAL (fuera de cualquier función) ----
+Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 #define RP_SPI   spi0
 #define PIN_SCK  2   // SCK0
@@ -166,12 +173,14 @@ void readMPU6050() {
 }
 
 void encoder_5600(){
-  long angle_raw = encoder_i2c.readAngle();   
-  float degrees = (angle_raw / 4096.0) * 360.0;
-  int magnitude = encoder_i2c.readMagnitude();    
-  Serial.print("Raw: "); Serial.print(angle_raw);
-  Serial.print("\tDeg: "); Serial.print(degrees, 3);
-  Serial.print("\tMag: "); Serial.println(magnitude);
+  int rawAngle = encoder_i2c.rawAngle();       // 0–4095
+  float grados = rawAngle * 360.0 / 4096;  // Conversión a grados
+  Serial.print("Raw: ");
+  Serial.print(rawAngle);
+  Serial.print("Ángulo: ");
+  Serial.print(grados, 2);
+  Serial.println("°");
+  delay(200);
 }
 void encoder_5048(){}
 void encoder_init(){
@@ -189,16 +198,27 @@ void encoder_init(){
 ///////////////////////
 void setup() {
   Serial.begin(115200);
-  while (!Serial) { delay(10); }
-  Wire.begin();  
-  // mpu.begin();       
-  encoder_init();
-  init_spi_slave();
+  Wire1.setSDA(14);
+  Wire1.setSCL(15);
+  Wire1.begin();  
+  // // mpu.begin();     
+
+
+  encoder_i2c.begin();
+  encoder_i2c.setDirection(AS5600_CLOCK_WISE);
+  // init_spi_slave();
   // initSimpleFOC();
+  pixels.begin();
+  pixels.clear();
+  pixels.show();
 }
 
 void loop() {
-
-
+  encoder_5600();
+  pixels.setPixelColor(0, pixels.Color(0, 0, 255));
+  pixels.show();
+  delay(100);
+  pixels.clear();
+  pixels.show();
   delay(100);
 }
