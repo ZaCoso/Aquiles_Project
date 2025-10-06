@@ -1085,11 +1085,11 @@ body::before {
   margin-bottom: 60px;
 }
 
-/* Cuando el grid está en modo de 2 columnas (895px a 1335px), alinear el último sponsor a la izquierda */
+/* Cuando el grid está en modo de 2 columnas (895px a 1335px), centrar el último sponsor */
 @media (min-width: 895px) and (max-width: 1335px) {
   .sponsors-grid .sponsor-card:last-child {
     grid-column: 1 / -1;
-    justify-self: flex-start;
+    justify-self: center;
     width: 100%;
     max-width: 600px;
   }
@@ -1178,11 +1178,6 @@ body::before {
   transition: all 0.3s ease;
 }
 
-.feature-item span {
-  text-align: center;
-  flex: 1;
-}
-
 .feature-item:hover {
   background-color: rgba(16, 32, 48, 0.7);
   transform: translateX(5px);
@@ -1192,6 +1187,11 @@ body::before {
 .feature-item i {
   color: var(--color-neon-teal);
   font-size: 1.2rem;
+}
+
+.feature-item span {
+  text-align: center;
+  flex: 1;
 }
 
 /* Sponsor CTA Section */
@@ -1272,7 +1272,7 @@ body::before {
   padding: 20px;
   border-radius: 10px;
   border: 1px solid rgba(140, 203, 213, 0.2);
-  text-align: center;
+  text-align: left;
   transition: all 0.3s ease;
 }
 
@@ -1301,7 +1301,7 @@ body::before {
 
 .cta-action {
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
   align-items: center;
 }
 
@@ -1328,7 +1328,7 @@ body::before {
 .instagram-btn {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 10px;
   background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
   color: white;
