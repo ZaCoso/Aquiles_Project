@@ -2472,10 +2472,11 @@ img {
 
 /* Exoskeleton Showcase Section - Nueva versión interactiva */
 .exo-showcase {
-  padding: 0px 0;
+  padding: 75px 0;
   position: relative;
   overflow: hidden;
   background-color: rgba(16, 32, 48, 0.8);
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .exo-showcase::before {
@@ -2489,6 +2490,8 @@ img {
   background-size: cover;
   opacity: 0.15;
   z-index: 0;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
+
 }
 
 .showcase-wrapper {
@@ -2804,7 +2807,7 @@ img {
 
 /* App Showcase Section */
 .app-showcase {
-  padding: 100px 0;
+  padding: 75px 0;
   position: relative;
   overflow: hidden;
   box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
@@ -2817,7 +2820,7 @@ img {
   overflow: hidden;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3), 0 0 20px rgba(140, 203, 213, 0.2);
   border: 1px solid rgba(140, 203, 213, 0.2);
-  margin: 0 20px;
+  margin: 0 60px;
 }
 
 .app-content {
@@ -3117,6 +3120,7 @@ img {
 .stats-section {
   width: 100%;
   overflow-x: hidden;
+  box-shadow: inset 0 0 50px rgba(140, 203, 213, 0.1);
 }
 
 .stats-grid {
