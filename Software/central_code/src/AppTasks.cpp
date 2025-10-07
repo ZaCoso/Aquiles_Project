@@ -6,6 +6,82 @@
 
 /// Queues
 
+NimBLECharacteristic *pCharacteristic;
+bool deviceConnected = false;
+std::string lastValue = "0";
+
+void MyCallbacks::onWrite(NimBLECharacteristic *pCharacteristic) {
+    std::string value = std::string(pCharacteristic->getValue().c_str());
+
+    if (value.length() > 0) {
+        Serial.print("Recibido via BLE: ");
+        Serial.println(value.c_str());
+
+        // Por ejemplo, cambiar porcentaje de asistencia
+        lastValue = value;
+    }
+}
+
+void MyServerCallbacks::onConnect(NimBLEServer* pServer) {
+    deviceConnected = true;
+    Serial.println("Dispositivo conectado");
+}
+
+void MyServerCallbacks::onDisconnect(NimBLEServer* pServer) {
+    deviceConnected = false;
+    Serial.println("Dispositivo desconectado");
+}
+
+void initBLE() {
+
+
+    // Inicializar BLE
+    NimBLEDevice::init(DEVICE_NAME);
+
+    // Crear servidor y callbacks
+    NimBLEServer* pServer = NimBLEDevice::createServer();
+    pServer->setCallbacks(new MyServerCallbacks());
+
+    // Crear servicio
+    NimBLEService* pService = pServer->createService(SERVICE_UUID);
+
+    // Crear characteristic con propiedades estándar
+    pCharacteristic = pService->createCharacteristic(
+        CHARACTERISTIC_UUID,
+        NIMBLE_PROPERTY::READ   |
+        NIMBLE_PROPERTY::WRITE  |
+        NIMBLE_PROPERTY::NOTIFY
+    );
+
+    // Agregar descriptor CCCD (Client Characteristic Configuration Descriptor)
+    // Esto habilita las notificaciones en la app cliente (Android/iOS)
+    pCharacteristic->createDescriptor("2902");
+
+    // Valor inicial y callback de escritura
+    pCharacteristic->setValue("0");
+    pCharacteristic->setCallbacks(new MyCallbacks());
+
+    // Iniciar el servicio
+    pService->start();
+
+    // Configurar y comenzar la publicidad
+    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->start();
+
+    Serial.println("ESP32 BLE listo para conexiones");
+}
+void enviarEstado() {
+    static int bat = 0;
+    bat = (bat + 1) % 101;
+    String mensaje = "BAT:" + String(bat);
+    pCharacteristic->setValue(mensaje.c_str());
+    pCharacteristic->notify();
+
+    Serial.print("Enviado: ");
+    Serial.println(mensaje);
+}
 void InitTask(void *params){
     // semph_LeftMotor = xSemaphoreCreateBinary();
     // semph_RightMotor = xSemaphoreCreateBinary();
