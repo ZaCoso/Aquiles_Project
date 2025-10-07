@@ -6,6 +6,102 @@
 
 /// Queues
 
+NimBLECharacteristic* pCharacteristic = nullptr;
+volatile bool deviceConnected = false;      // <-- coincide con el .h
+std::string lastValue = "0";
+
+// Forward declare por las dudas (opcional, pero ayuda al compilador)
+void TaskBleNotify(void* pv);
+
+// ---- Callbacks ----
+void MyCallbacks::onWrite(NimBLECharacteristic* pChar) {
+  std::string value = std::string(pChar->getValue().c_str());
+  if (!value.empty()) {
+    Serial.print("Recibido via BLE: ");
+    Serial.println(value.c_str());
+    lastValue = value;
+  }
+}
+
+void MyServerCallbacks::onConnect(NimBLEServer* /*pServer*/) {
+  deviceConnected = true;
+  Serial.println("Dispositivo conectado");
+}
+void MyServerCallbacks::onDisconnect(NimBLEServer* /*pServer*/) {
+  deviceConnected = false;
+  Serial.println("Dispositivo desconectado");
+}
+
+// ---- BLE init ----
+void initBLE() {
+
+
+  NimBLEDevice::init(DEVICE_NAME);
+
+  NimBLEServer* pServer = NimBLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  NimBLEService* pService = pServer->createService(SERVICE_UUID);
+
+  pCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID,
+    NIMBLE_PROPERTY::READ  |
+    NIMBLE_PROPERTY::WRITE |
+    NIMBLE_PROPERTY::NOTIFY
+  );
+
+  // CCCD (0x2902) para notificaciones
+  
+
+  pCharacteristic->setValue("0");
+  pCharacteristic->setCallbacks(new MyCallbacks());
+  pService->start();
+
+  NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->start();
+
+  Serial.println("ESP32 BLE listo para conexiones");
+
+  // ---- FreeRTOS task: notifica cada 3 s si hay conexión ----
+  xTaskCreatePinnedToCore(
+    TaskBleNotify,           // <-- ahora sí está declarado
+    "BLE_NOTIFY",
+    4096,
+    nullptr,
+    1,
+    nullptr,
+    1
+  );
+}
+
+// ---- Enviar estado ----
+void enviarEstado() {
+  static int bat = 0;
+  bat = (bat + 1) % 101;
+  String mensaje = "BAT:" + String(bat);
+
+  if (pCharacteristic) {
+    pCharacteristic->setValue(mensaje.c_str());
+    pCharacteristic->notify();
+  }
+
+  Serial.print("Enviado: ");
+  Serial.println(mensaje);
+}
+
+// ---- Task: notifica cada 3 s ----
+void TaskBleNotify(void* /*pv*/) {
+  const TickType_t period = pdMS_TO_TICKS(3000);
+  for (;;) {
+    if (deviceConnected) {
+      enviarEstado();
+      Serial.println(lastValue.c_str());
+    }
+    vTaskDelay(period);
+  }
+}
 void InitTask(void *params){
     // semph_LeftMotor = xSemaphoreCreateBinary();
     // semph_RightMotor = xSemaphoreCreateBinary();
@@ -22,7 +118,7 @@ void BlinkTask(void *params){
     while(1){
     digitalWrite(46, !digitalRead(46));
 
-    Serial.printf("[SPI] Enviando: ");
+    Serial.printf("[SPI] SD: ");
     vTaskDelay(pdMS_TO_TICKS(500));}
 }
 // ---- Tarea que envía el paquete SPI cada 500 ms ----

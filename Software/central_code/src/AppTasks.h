@@ -2,6 +2,14 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <SPI.h>
+#include <NimBLEDevice.h>
+
+// Nombre del dispositivo BLE
+#define DEVICE_NAME "Aquiles X1"
+// UUIDs personalizados
+#define SERVICE_UUID        "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+#define CHARACTERISTIC_UUID "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+
 
 // ====== Pines del BUS SPI compartido ======
 #define PIN_SCK    18
@@ -35,10 +43,26 @@ bool rp2040_send_packet(int16_t v1, int16_t v2, int16_t v3,
 // rx puede ser nullptr si no te interesa leer.
 bool devB_transfer(const uint8_t* tx, uint8_t* rx, size_t n);
 
-// ---- Utilidades (por si las necesitás en otras partes) ----
-uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init = 0x00);
-void    parse_int16_triplet(const uint8_t* p, int16_t& a, int16_t& b, int16_t& c);
+// Globals
+extern NimBLECharacteristic* pCharacteristic;
+extern volatile bool deviceConnected;   // <-- ahora coincide con el .cpp
+extern std::string lastValue;
 
+// Callbacks
+class MyCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* pCharacteristic) override;
+};
+class MyServerCallbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer* pServer) override;
+  void onDisconnect(NimBLEServer* pServer) override;
+};
+
+// API
+void initBLE();
+void enviarEstado();
+uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init = 0x00);
+// FreeRTOS task
+void TaskBleNotify(void* pv);       
 // ---- Tareas de ejemplo (opcional) ----
 void vSpiTask_RP2040(void* pv);
 void vSpiTask_DevB(void* pv);
