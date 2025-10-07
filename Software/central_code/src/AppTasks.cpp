@@ -6,81 +6,101 @@
 
 /// Queues
 
-NimBLECharacteristic *pCharacteristic;
-bool deviceConnected = false;
+NimBLECharacteristic* pCharacteristic = nullptr;
+volatile bool deviceConnected = false;      // <-- coincide con el .h
 std::string lastValue = "0";
 
-void MyCallbacks::onWrite(NimBLECharacteristic *pCharacteristic) {
-    std::string value = std::string(pCharacteristic->getValue().c_str());
+// Forward declare por las dudas (opcional, pero ayuda al compilador)
+void TaskBleNotify(void* pv);
 
-    if (value.length() > 0) {
-        Serial.print("Recibido via BLE: ");
-        Serial.println(value.c_str());
-
-        // Por ejemplo, cambiar porcentaje de asistencia
-        lastValue = value;
-    }
+// ---- Callbacks ----
+void MyCallbacks::onWrite(NimBLECharacteristic* pChar) {
+  std::string value = std::string(pChar->getValue().c_str());
+  if (!value.empty()) {
+    Serial.print("Recibido via BLE: ");
+    Serial.println(value.c_str());
+    lastValue = value;
+  }
 }
 
-void MyServerCallbacks::onConnect(NimBLEServer* pServer) {
-    deviceConnected = true;
-    Serial.println("Dispositivo conectado");
+void MyServerCallbacks::onConnect(NimBLEServer* /*pServer*/) {
+  deviceConnected = true;
+  Serial.println("Dispositivo conectado");
+}
+void MyServerCallbacks::onDisconnect(NimBLEServer* /*pServer*/) {
+  deviceConnected = false;
+  Serial.println("Dispositivo desconectado");
 }
 
-void MyServerCallbacks::onDisconnect(NimBLEServer* pServer) {
-    deviceConnected = false;
-    Serial.println("Dispositivo desconectado");
-}
-
+// ---- BLE init ----
 void initBLE() {
+  Serial.begin(115200);
 
+  NimBLEDevice::init(DEVICE_NAME);
 
-    // Inicializar BLE
-    NimBLEDevice::init(DEVICE_NAME);
+  NimBLEServer* pServer = NimBLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
 
-    // Crear servidor y callbacks
-    NimBLEServer* pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new MyServerCallbacks());
+  NimBLEService* pService = pServer->createService(SERVICE_UUID);
 
-    // Crear servicio
-    NimBLEService* pService = pServer->createService(SERVICE_UUID);
+  pCharacteristic = pService->createCharacteristic(
+    CHARACTERISTIC_UUID,
+    NIMBLE_PROPERTY::READ  |
+    NIMBLE_PROPERTY::WRITE |
+    NIMBLE_PROPERTY::NOTIFY
+  );
 
-    // Crear characteristic con propiedades estándar
-    pCharacteristic = pService->createCharacteristic(
-        CHARACTERISTIC_UUID,
-        NIMBLE_PROPERTY::READ   |
-        NIMBLE_PROPERTY::WRITE  |
-        NIMBLE_PROPERTY::NOTIFY
-    );
+  // CCCD (0x2902) para notificaciones
+  pCharacteristic->createDescriptor("2902");
 
-    // Agregar descriptor CCCD (Client Characteristic Configuration Descriptor)
-    // Esto habilita las notificaciones en la app cliente (Android/iOS)
-    pCharacteristic->createDescriptor("2902");
+  pCharacteristic->setValue("0");
+  pCharacteristic->setCallbacks(new MyCallbacks());
+  pService->start();
 
-    // Valor inicial y callback de escritura
-    pCharacteristic->setValue("0");
-    pCharacteristic->setCallbacks(new MyCallbacks());
+  NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->start();
 
-    // Iniciar el servicio
-    pService->start();
+  Serial.println("ESP32 BLE listo para conexiones");
 
-    // Configurar y comenzar la publicidad
-    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(true);
-    pAdvertising->start();
-
-    Serial.println("ESP32 BLE listo para conexiones");
+  // ---- FreeRTOS task: notifica cada 3 s si hay conexión ----
+  xTaskCreatePinnedToCore(
+    TaskBleNotify,           // <-- ahora sí está declarado
+    "BLE_NOTIFY",
+    4096,
+    nullptr,
+    1,
+    nullptr,
+    1
+  );
 }
+
+// ---- Enviar estado ----
 void enviarEstado() {
-    static int bat = 0;
-    bat = (bat + 1) % 101;
-    String mensaje = "BAT:" + String(bat);
+  static int bat = 0;
+  bat = (bat + 1) % 101;
+  String mensaje = "BAT:" + String(bat);
+
+  if (pCharacteristic) {
     pCharacteristic->setValue(mensaje.c_str());
     pCharacteristic->notify();
+  }
 
-    Serial.print("Enviado: ");
-    Serial.println(mensaje);
+  Serial.print("Enviado: ");
+  Serial.println(mensaje);
+}
+
+// ---- Task: notifica cada 3 s ----
+void TaskBleNotify(void* /*pv*/) {
+  const TickType_t period = pdMS_TO_TICKS(3000);
+  for (;;) {
+    if (deviceConnected) {
+      enviarEstado();
+      Serial.println(lastValue.c_str());
+    }
+    vTaskDelay(period);
+  }
 }
 void InitTask(void *params){
     // semph_LeftMotor = xSemaphoreCreateBinary();
