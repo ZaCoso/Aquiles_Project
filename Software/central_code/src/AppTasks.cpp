@@ -34,7 +34,7 @@ void MyServerCallbacks::onDisconnect(NimBLEServer* /*pServer*/) {
 
 // ---- BLE init ----
 void initBLE() {
-  Serial.begin(115200);
+
 
   NimBLEDevice::init(DEVICE_NAME);
 
@@ -51,7 +51,7 @@ void initBLE() {
   );
 
   // CCCD (0x2902) para notificaciones
-  pCharacteristic->createDescriptor("2902");
+  
 
   pCharacteristic->setValue("0");
   pCharacteristic->setCallbacks(new MyCallbacks());
@@ -118,7 +118,7 @@ void BlinkTask(void *params){
     while(1){
     digitalWrite(46, !digitalRead(46));
 
-    Serial.printf("[SPI] Enviando: ");
+    Serial.printf("[SPI] SD: ");
     vTaskDelay(pdMS_TO_TICKS(500));}
 }
 // ---- Tarea que envía el paquete SPI cada 500 ms ----
