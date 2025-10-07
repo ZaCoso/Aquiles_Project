@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
 class InstructionsScreen extends StatefulWidget {
   const InstructionsScreen({super.key});
@@ -62,8 +63,8 @@ class _InstructionsScreenState extends State<InstructionsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
-                          width: 64,
-                          height: 64,
+                          width: 50,
+                          height: 50,
                           child: Image.asset(
                             'assets/images/logo.png',
                             fit: BoxFit.contain,
@@ -215,16 +216,7 @@ class _InstructionStepCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: Image.asset(
-              'assets/images/exoesqueleto-1.png',
-              height: 150,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
-            ),
-          ),
+          const _InstructionVideoPlayer(),
           const SizedBox(height: 24),
           const Text(
             '1. Se recomienda cargar completamente la bateria antes del primer uso.',
@@ -270,4 +262,96 @@ class _InstructionStepCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _InstructionVideoPlayer extends StatefulWidget {
+  const _InstructionVideoPlayer({super.key});
+
+  @override
+  State<_InstructionVideoPlayer> createState() => _InstructionVideoPlayerState();
+}
+
+class _InstructionVideoPlayerState extends State<_InstructionVideoPlayer>
+    with AutomaticKeepAliveClientMixin {
+  late final VideoPlayerController _controller;
+  late final Future<void> _initializeVideo;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.asset('assets/videos/vid1.mp4');
+    _initializeVideo = _controller.initialize().then((_) async {
+      if (!mounted) return;
+      await _controller.setLooping(true);
+      await _controller.setVolume(0);
+      await _controller.play();
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        height: 150,
+        width: double.infinity,
+        child: FutureBuilder<void>(
+          future: _initializeVideo,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return Container(
+                color: const Color(0xFF0A1A2A),
+                alignment: Alignment.center,
+                child: SizedBox(
+                  height: 28,
+                  width: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(Color(0xFF8CCBD5)),
+                  ),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Container(
+                color: const Color(0xFF0A1A2A),
+                alignment: Alignment.center,
+                child: const Icon(Icons.error_outline, color: Colors.white70),
+              );
+            }
+
+            final videoSize = _controller.value.size;
+            final width = videoSize.width > 0 ? videoSize.width : 1.0;
+            final height = videoSize.height > 0 ? videoSize.height : 1.0;
+
+            return Container(
+              color: Colors.black,
+              child: FittedBox(
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: width,
+                  height: height,
+                  child: VideoPlayer(_controller),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool get wantKeepAlive => true;
 }
