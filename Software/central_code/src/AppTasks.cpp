@@ -1,7 +1,200 @@
 #include "AppTasks.h"
 
 namespace Aquiles {
+    namespace Detection {
 
+      // ========= Estado interno =========
+      static GlobalCfg CFG;
+
+      static QueueHandle_t qInL = nullptr;   // cola de entrada (prof 1, overwrite)
+      static QueueHandle_t qInR = nullptr;
+
+      static LegSignals SIG_L, SIG_R;        // señales derivadas
+      static CmdOut     CMD_L, CMD_R;        // salida final (suavizada)
+      static float      sp_cur_L = 0.0f, sp_cur_R = 0.0f;
+
+      // Hint bilateral (opcional)
+      static bool contra_hint_L = true;  // “R en stance”
+      static bool contra_hint_R = true;  // “L en stance”
+
+      // ========= Helpers =========
+      static inline uint32_t micros32(){ return (uint32_t)micros(); }
+      static inline float unwrap(float th, float th_prev){
+        float d = th - th_prev;
+        while(d >  (float)M_PI) d -= 2.f*(float)M_PI;
+        while(d < -(float)M_PI) d += 2.f*(float)M_PI;
+        return th_prev + d;
+      }
+      static inline float slew(float target, float current, float max_delta){
+        float d = target - current;
+        if(d >  max_delta) d =  max_delta;
+        if(d < -max_delta) d = -max_delta;
+        return current + d;
+      }
+      static inline float clamp(float v, float lo, float hi){
+        return (v<lo)?lo:(v>hi)?hi:v;
+      }
+
+      // ========= Intención & Planner (plantillas) =========
+      static IntentOut detectIntent(const LegSignals& s_i,
+                                    const LegSignals& s_contra,
+                                    const IntentCfg& icfg,
+                                    bool contra_stance_hint)
+      {
+        // Evidencias mínimas: velocidad angular y/o pulso inercial
+        bool geom   = (fabsf(s_i.omega) >= icfg.omega_min);
+        bool inert  = (fabsf(s_i.a_fwd_g) >= icfg.acc_min_g) || geom;
+        bool contra = contra_stance_hint || (fabsf(s_contra.omega) < 0.2f);
+
+        // La persistencia t_win/t_hold la podés implementar después con contadores.
+        bool persist= true;
+
+        IntentOut out;
+        out.enable = (geom && inert && contra && persist);
+        out.phase  = out.enable ? Phase::SWING : Phase::STANCE;
+        return out;
+      }
+
+      static CmdOut planner(const IntentOut& I,
+                            const LegSignals& s,
+                            const LimitsCfg& lims,
+                            float slew_per_tick,
+                            float& sp_accum /*estado del smoother*/)
+      {
+        // Objetivo “ideal”
+        float sp_target = 0.0f;
+        Mode  mode      = Mode::TORQUE;
+
+        if (I.enable && I.phase==Phase::SWING){
+          // Ejemplo: torque proporcional a ω (ajustá la ganancia 0.5f)
+          sp_target = clamp(0.5f * s.omega, -lims.I_max, lims.I_max);
+        }
+
+        // Ventana articular básica
+        if (s.theta < lims.pos_min || s.theta > lims.pos_max) sp_target = 0.0f;
+
+        // Suavizado (slew)
+        sp_accum = slew(sp_target, sp_accum, slew_per_tick);
+
+        CmdOut out;
+        out.mode     = mode;
+        out.setpoint = sp_accum;
+        return out;
+      }
+
+      // ========= Tareas =========
+
+      // Fusion: deriva ω a partir del encoder y mantiene señales (1 kHz)
+      static void taskFusion(void*){
+        float thL_prev = 0.0f, thR_prev = 0.0f;
+        uint32_t tsL_prev = 0, tsR_prev = 0;
+
+        TickType_t last = xTaskGetTickCount();
+        for(;;){
+          // LEFT
+          SampleIn inL;
+          if (xQueueReceive(qInL, &inL, 0)==pdTRUE){
+            uint32_t ts = inL.ts_us ? inL.ts_us : micros32();
+            float th = unwrap(inL.theta_rad, thL_prev);
+            float dt = (tsL_prev==0) ? 0.001f : (float)(ts - tsL_prev)/1e6f;  // s
+            if (dt <= 0) dt = 1e-3f;
+            float w  = (th - thL_prev)/dt;
+
+            SIG_L.theta   = th;
+            SIG_L.omega   = w;
+            SIG_L.a_fwd_g = inL.accel_fwd_g;
+            SIG_L.coh_ok  = !inL.imu_sat;      // placeholder
+            SIG_L.rx_us   = ts;
+
+            thL_prev = th; tsL_prev = ts;
+          }
+
+          // RIGHT
+          SampleIn inR;
+          if (xQueueReceive(qInR, &inR, 0)==pdTRUE){
+            uint32_t ts = inR.ts_us ? inR.ts_us : micros32();
+            float th = unwrap(inR.theta_rad, thR_prev);
+            float dt = (tsR_prev==0) ? 0.001f : (float)(ts - tsR_prev)/1e6f;
+            if (dt <= 0) dt = 1e-3f;
+            float w  = (th - thR_prev)/dt;
+
+            SIG_R.theta   = th;
+            SIG_R.omega   = w;
+            SIG_R.a_fwd_g = inR.accel_fwd_g;
+            SIG_R.coh_ok  = !inR.imu_sat;
+            SIG_R.rx_us   = ts;
+
+            thR_prev = th; tsR_prev = ts;
+          }
+
+          vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.fusion_period_ms));
+        }
+      }
+
+      // Planner + Smoother (1 kHz)
+      static void taskPlanner(void*){
+        TickType_t last = xTaskGetTickCount();
+        for(;;){
+          // Intención bilateral (hint evita doble-swing)
+          IntentOut IL = detectIntent(SIG_L, SIG_R, CFG.intent, contra_hint_L);
+          IntentOut IR = detectIntent(SIG_R, SIG_L, CFG.intent, contra_hint_R);
+
+          // Planner por pierna
+          CMD_L = planner(IL, SIG_L, CFG.limits, CFG.slew_per_tick, sp_cur_L);
+          CMD_R = planner(IR, SIG_R, CFG.limits, CFG.slew_per_tick, sp_cur_R);
+
+          vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.planner_period_ms));
+        }
+      }
+
+      // Logger (50 Hz por defecto)
+      static void taskLogger(void*){
+        TickType_t last = xTaskGetTickCount();
+        for(;;){
+          // Ejemplo de log:
+          // Serial.printf("L th=%.2f w=%.2f | R th=%.2f w=%.2f | spL=%.2f spR=%.2f\n",
+          //   SIG_L.theta, SIG_L.omega, SIG_R.theta, SIG_R.omega, CMD_L.setpoint, CMD_R.setpoint);
+          vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.logger_period_ms));
+        }
+      }
+
+      // ========= API =========
+      void begin(const GlobalCfg& cfg){
+        CFG = cfg;
+
+        // Colas de entrada (prof 1, overwrite)
+        qInL = xQueueCreate(1, sizeof(SampleIn));
+        qInR = xQueueCreate(1, sizeof(SampleIn));
+
+        // Tareas internas (pinned a los cores como en tu estilo)
+        xTaskCreatePinnedToCore(taskFusion,  "Fusion",  3072, nullptr, 4, nullptr, 1);
+        xTaskCreatePinnedToCore(taskPlanner, "Planner", 4096, nullptr, 3, nullptr, 1);
+        xTaskCreatePinnedToCore(taskLogger,  "Logger",  2048, nullptr, 1, nullptr, 0);
+      }
+
+      void pushSample(Leg leg, const SampleIn& s){
+        if (leg==Leg::L)  xQueueOverwrite(qInL, &s);
+        else              xQueueOverwrite(qInR, &s);
+      }
+
+      const LegSignals& getSignals(Leg leg){
+        return (leg==Leg::L) ? SIG_L : SIG_R;
+      }
+
+      CmdOut getCmd(Leg leg){
+        return (leg==Leg::L) ? CMD_L : CMD_R;
+      }
+
+      void setLimits(const LimitsCfg& lims){ CFG.limits = lims; }
+      void setIntentCfg(const IntentCfg& icfg){ CFG.intent = icfg; }
+      void setSlew(float slew_per_tick){ CFG.slew_per_tick = slew_per_tick; }
+
+      void setContraStanceHint(Leg leg_in_swing, bool contralateral_is_in_stance){
+        if (leg_in_swing==Leg::L) contra_hint_L = contralateral_is_in_stance;
+        else                      contra_hint_R = contralateral_is_in_stance;
+      }
+
+    } // namespace Detection
     // ================= BLE =================
     namespace BLE {
         NimBLECharacteristic* pCharacteristic = nullptr;

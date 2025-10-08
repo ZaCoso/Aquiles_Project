@@ -31,6 +31,91 @@ namespace Aquiles {
     constexpr UBaseType_t tskSPI_TX_PRIORITY = tskIDLE_PRIORITY + 2UL;
 
     // ====== Forward namespaces ======
+    namespace Detection {
+
+        // ---------------- Tipos básicos ----------------
+        enum class Leg   : uint8_t { L=0, R=1 };
+        enum class Phase : uint8_t { STANCE=0, SWING=1 };
+        enum class Mode  : uint8_t { OFF=0, TORQUE=1, VELOCITY=2, POSITION=3 };
+
+        // Muestra cruda que inyectás vos (una por pierna)
+        struct SampleIn {
+        float    theta_rad   = 0.0f;   // ángulo tronco–pierna (encoder)
+        float    omega_imu   = 0.0f;   // rad/s (gyro) opcional
+        float    accel_fwd_g = 0.0f;   // g (acelerómetro) opcional
+        uint32_t ts_us       = 0;      // timestamp; si 0 => micros()
+        bool     imu_sat     = false;  // saturación IMU
+        };
+
+        // Señales derivadas/fusionadas (por pierna)
+        struct LegSignals {
+        float    theta   = 0.0f;     // rad
+        float    omega   = 0.0f;     // rad/s (derivada del encoder)
+        float    a_fwd_g = 0.0f;     // g (si se inyecta)
+        bool     coh_ok  = true;     // coherencia básica
+        uint32_t rx_us   = 0;        // timestamp último update
+        };
+
+        // Salidas
+        struct IntentOut {
+        bool  enable = false;
+        Phase phase  = Phase::STANCE;
+        };
+
+        struct CmdOut {
+        float setpoint = 0.0f;   // lo que mandarías al driver
+        Mode  mode     = Mode::TORQUE;
+        };
+
+        // ---------------- Configuración ----------------
+        struct LimitsCfg {
+        float I_max   = 6.0f;     // para modo torque
+        float vel_max = 25.0f;    // rad/s
+        float pos_min = -3.14f;   // rad
+        float pos_max =  3.14f;   // rad
+        };
+
+        struct IntentCfg {
+        uint16_t t_win_ms   = 100;                          // ventana detección
+        uint16_t t_hold_ms  = 50;                           // persistencia
+        float    dtheta_min = 10.0f * (float)M_PI/180.f;    // rad (si la usás)
+        float    omega_min  = 1.0f;                         // rad/s
+        float    acc_min_g  = 0.3f;                         // g
+        };
+
+        struct TimingCfg {
+        uint16_t fusion_period_ms   = 1;    // 1 kHz
+        uint16_t planner_period_ms  = 1;    // 1 kHz
+        uint16_t logger_period_ms   = 20;   // 50 Hz
+        };
+
+        struct GlobalCfg {
+        LimitsCfg limits;
+        IntentCfg intent;
+        TimingCfg timing;
+        float     slew_per_tick = 0.10f;    // rampa por ciclo del planner
+        };
+
+        // --------------- API pública -------------------
+        // Inicializa la lógica (crea tareas internas). No usa SPI.
+        void begin(const GlobalCfg& cfg = GlobalCfg{});
+
+        // Inyectar muestras “en el aire” (desde tus tasks/ISRs)
+        void pushSample(Leg leg, const SampleIn& s);
+
+        // Lectura de estado/salidas
+        const LegSignals& getSignals(Leg leg);
+        CmdOut            getCmd(Leg leg);
+
+        // Ajustes en caliente (opcionales)
+        void setLimits(const LimitsCfg& lims);
+        void setIntentCfg(const IntentCfg& icfg);
+        void setSlew(float slew_per_tick);
+
+        // Hint bilateral (si querés forzar “la otra pierna está en apoyo”)
+        void setContraStanceHint(Leg leg_in_swing, bool contralateral_is_in_stance);
+
+    } // namespace Detection
     namespace BLE {
         extern NimBLECharacteristic* pCharacteristic;
         extern volatile bool deviceConnected;
