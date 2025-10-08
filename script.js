@@ -21,7 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (scrollVideo && videoSection) {
     // Configurar el video
     scrollVideo.addEventListener("loadedmetadata", () => {
-      console.log("Video cargado, duración:", scrollVideo.duration)
+      // Video cargado
     })
 
     // Función para actualizar el video basado en el scroll
@@ -108,7 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Manejar errores de video
     scrollVideo.addEventListener("error", (e) => {
-      console.error("Error al cargar el video:", e)
+      // Error al cargar el video
     })
   }
 
@@ -219,8 +219,6 @@ document.addEventListener("DOMContentLoaded", () => {
   })
   // ===== Award optional image toggles =====
   // Lightbox for award images (click image to open, outside or X to close)
-
-  // Animación de partículas en el hero
   function createHeroParticles() {
     const heroBackground = document.querySelector(".hero-background")
     if (!heroBackground) return
@@ -300,12 +298,11 @@ function handleVideoLoad() {
   const video = document.getElementById("scroll-video")
   if (video) {
     video.addEventListener("canplaythrough", () => {
-      console.log("Video listo para reproducir")
       video.currentTime = 0
     })
 
     video.addEventListener("loadstart", () => {
-      console.log("Iniciando carga del video")
+      // Iniciando carga del video
     })
 
     video.addEventListener("progress", () => {
@@ -314,7 +311,7 @@ function handleVideoLoad() {
         const duration = video.duration
         if (duration > 0) {
           const bufferedPercent = (bufferedEnd / duration) * 100
-          console.log(`Video cargado: ${bufferedPercent.toFixed(1)}%`)
+          // Video cargado
         }
       }
     })
@@ -887,12 +884,6 @@ function initLightbox() {
 document.addEventListener('DOMContentLoaded', initLightbox);
 
 document.head.appendChild(style);
-//   
-// 
-// 
-// 
-// 
-// VOLVER (toggle image and label)
 document.addEventListener('DOMContentLoaded', function() {
   var volverHotspot = document.getElementById('hotspot-volver');
   var exoImg = document.querySelector('.exo-main-image');
@@ -910,313 +901,119 @@ document.addEventListener('DOMContentLoaded', function() {
   var hotspotRegulador = document.querySelector('.hotspot[data-feature="regulador"]');
 
 
-  // Define positions for each state
-  var positionsFront = {
-      ia:  { top: "25%", left: "80%" },
-      bateria: { top: "15%", left: "64%" },
-      sensor: { top: "27%", left: "28%"  },
-      motor: { top: "40%", left: "76%" },
-      regulador: { top: "80%", left: "38%" },
-      volver: { top: "87%", left: "80%" }
-  };
-  var positionsBack = {
-      ia:  { top: "24%", left: "34%" },
-      bateria: { top: "17%", left: "80%" },
-      sensor: { top: "60%", left: "20%" },
-      motor: { top: "32%", left: "16%" },
-      regulador: { top: "79%", left: "44%" },
-      volver: { top: "87%", left: "80%" }
-  };
+  // ========================================
+  // SIST. De Posicionamiento
+  // ========================================
 
-  // ========================================
-  // HOTSPOT POSITIONS - AJUSTA AQUÍ LOS VALORES
-  // ========================================
+  var imageBasedPositionsFront = {
+      ia:        { top: "25%", left: "80%" },
+      bateria:   { top: "8.5%", left: "71%" },
+      sensor:    { top: "27%", left: "28%" },
+      motor:     { top: "40%", left: "76%" },
+      regulador: { top: "87.2%", left: "60%" },
+      volver:    { top: "87%", left: "73%" }
+  };
   
-  // 📱 POSICIONES PARA PANTALLAS DE 805px Y MENOR
-  var positionsFrontMobile = {
-      ia:        { top: "25%", left: "1%" },      // -
-      bateria:   { top: "15%", left: "65%" },     // XXX
-      sensor:    { top: "27%", left: "28%" },     // 
-      motor:     { top: "40%", left: "70%" },     // 
-      regulador: { top: "85.5%", left: "57.3%" }, // XXX
-      volver:    { top: "90%", left: "73%" }      // 
-  };
-  var positionsBackMobile = {
-      ia:        { top: "22%", left: "37%" }, // XXX
-      bateria:   { top: "17%", left: "74%" }, // XXX
-      sensor:    { top: "60%", left: "25%" }, // -
-      motor:     { top: "33%", left: "22%" }, // XXX
-      regulador: { top: "85%", left: "36%" }, // XXX
-      volver:    { top: "90%", left: "73%" }  // 
+  var imageBasedPositionsBack = {
+      ia:        { top: "24%", left: "34%" },
+      bateria:   { top: "10%", left: "72%" },
+      sensor:    { top: "60%", left: "20%" },
+      motor:     { top: "33%", left: "19%" },
+      regulador: { top: "87%", left: "35%" },
+      volver:    { top: "87%", left: "73%" }
   };
 
-  // 📱 POSICIONES PARA PANTALLAS DE 560px
-  var positionsFront560 = {
-      ia:        { top: "23%", left: "1%" },    // -
-      bateria:   { top: "15%", left: "61%" },   // 
-      sensor:    { top: "26%", left: "29.5%" },   // XXX
-      motor:     { top: "39.5%", left: "72%" }, // XXX
-      regulador: { top: "85%", left: "57.5%" }, // XXX
-      volver:    { top: "90%", left: "70%" }    // 
-  };
-  var positionsBack560 = {
-      ia:        { top: "24%", left: "34%" }, // XXX
-      bateria:   { top: "17%", left: "74%" }, // XXX
-      sensor:    { top: "58%", left: "22%" }, // -
-      motor:     { top: "33%", left: "20%" }, // XXXX
-      regulador: { top: "83%", left: "36%" }, // XXX
-      volver:    { top: "90%", left: "70%" }  // 
-  };
-
-  // 📱 POSICIONES PARA PANTALLAS DE 460px
-  var positionsFront460 = {
-      ia:        { top: "22%", left: "1%" },  // -
-      bateria:   { top: "18%", left: "61%" }, // XXX
-      sensor:    { top: "28%", left: "28.5%" }, // XXX
-      motor:     { top: "41%", left: "71%" }, // XXX
-      regulador: { top: "79%", left: "57%" }, // XXX
-      volver:    { top: "90%", left: "65%" }  // 
-  };
-  var positionsBack460 = {
-      ia:        { top: "25%", left: "33%" },   // XXX
-      bateria:   { top: "21%", left: "74%" },   // XXX
-      sensor:    { top: "57%", left: "20%" },   // -
-      motor:     { top: "34.5%", left: "19%" }, // XXX
-      regulador: { top: "78%", left: "35%" },   // XXX
-      volver:    { top: "90%", left: "65%" }    // 
-  };
-
-  // 📱 POSICIONES PARA PANTALLAS DE 400px
-  var positionsFront400 = {
-      ia:        { top: "21.5%", left: "1%" },    // -
-      bateria:   { top: "22%", left: "61%" },     // XXX
-      sensor:    { top: "31%", left: "27.5%" },   // XXX
-      motor:     { top: "41.5%", left: "71%" },   // XXX
-      regulador: { top: "76%", left: "56%" },     // XXX
-      volver:    { top: "90%", left: "65%" }    // 
-  };
-  var positionsBack400 = {
-      ia:        { top: "28%", left: "31%" },     // XXX
-      bateria:   { top: "25%", left: "75%" },     // XXX
-      sensor:    { top: "56.5%", left: "19.5%" }, // -
-      motor:     { top: "36%", left: "18%" },     // XXX
-      regulador: { top: "73%", left: "35%" },     // XXX
-      volver:    { top: "90%", left: "65%" }    // 
-  };
-
-  // 📱 POSICIONES PARA PANTALLAS DE 360px
-  var positionsFront360 = {
-      ia:        { top: "21%", left: "1%" },    // -
-      bateria:   { top: "23%", left: "60.5%" }, // XXX
-      sensor:    { top: "32%", left: "27.5%" }, //XXX 
-      motor:     { top: "41.5%", left: "70%" }, // XXX
-      regulador: { top: "74%", left: "56%" },   // XXX
-      volver:    { top: "90%", left: "58%" }    // 
-  };
-  var positionsBack360 = {
-      ia:        { top: "29%", left: "30%" },   // XXX
-      bateria:   { top: "26%", left: "74%" },   // XXX
-      sensor:    { top: "50%", left: "19%" },   // -
-      motor:     { top: "36.5%", left: "17%" }, // XXX
-      regulador: { top: "73%", left: "35%" },   // XXX
-      volver:    { top: "90%", left: "58%" }    // 
-  };
-
-  // ========================================
-  // FUNCIONES PARA SELECCIONAR POSICIONES
-  // ========================================
   
-  // Selecciona las posiciones front según el ancho de pantalla
-  function getPositionsFront() {
-    const screenWidth = window.innerWidth;
+  
+  // Función para obtener las posiciones basadas en la imagen actual
+  function getImageBasedPositions(isFrontView) {
+    return isFrontView ? imageBasedPositionsFront : imageBasedPositionsBack;
+  }
+  
+  // Función para aplicar posiciones basadas en la imagen
+  function applyImageBasedPositions(positions) {
+    // Obtener el contenedor de la imagen y la imagen misma
+    const imageContainer = document.querySelector('.exo-image-container');
+    const image = document.querySelector('.exo-main-image');
     
-    if (screenWidth <= 360) {
-      return positionsFront360;        // Para pantallas ≤ 360px
-    } else if (screenWidth <= 400) {
-      return positionsFront400;        // Para pantallas ≤ 400px
-    } else if (screenWidth <= 460) {
-      return positionsFront460;        // Para pantallas ≤ 460px
-    } else if (screenWidth <= 560) {
-      return positionsFront560;        // Para pantallas ≤ 560px
-    } else if (screenWidth <= 805) {
-      return positionsFrontMobile;     // Para pantallas ≤ 805px
-    } else {
-      return positionsFront;           // Para pantallas > 805px (desktop)
+    if (!imageContainer || !image) {
+      return;
     }
+    
+    // Obtener las dimensiones del contenedor y la imagen
+    const containerRect = imageContainer.getBoundingClientRect();
+    const imageRect = image.getBoundingClientRect();
+    
+    // Obtener las dimensiones CSS computadas de la imagen
+    const computedStyle = window.getComputedStyle(image);
+    const imageWidth = parseFloat(computedStyle.width);
+    const imageHeight = parseFloat(computedStyle.height);
+    
+    // Calcular el offset de la imagen dentro del contenedor
+    const imageOffsetX = imageRect.left - containerRect.left;
+    const imageOffsetY = imageRect.top - containerRect.top;
+    
+    // Aplicar posiciones a cada hotspot
+    Object.keys(positions).forEach(hotspotName => {
+      let hotspot;
+      
+      // Manejo especial para el botón "volver" que no tiene data-feature
+      if (hotspotName === 'volver') {
+        hotspot = document.getElementById('hotspot-volver');
+      } else {
+        hotspot = document.querySelector(`.hotspot[data-feature="${hotspotName}"]`);
+      }
+      
+      if (hotspot && positions[hotspotName]) {
+          const position = positions[hotspotName];
+          
+          // Convertir porcentajes a píxeles basándose en las dimensiones CSS de la imagen
+          let topPercent = parseFloat(position.top) / 100;
+          let leftPercent = parseFloat(position.left) / 100;
+          
+          // Ajuste especial para el botón "volver" en pantallas pequeñas (0px a 500px)
+          if (hotspotName === 'volver' && window.innerWidth <= 500) {
+            leftPercent = 0.70; // 15% desde la izquierda de la imagen para pantallas pequeñas
+            topPercent = 0.95; // 15% desde la izquierda de la imagen para pantallas pequeñas
+          }
+          if (hotspotName === 'volver' && window.innerWidth <= 420) {
+            leftPercent = 0.70; // 15% desde la izquierda de la imagen para pantallas pequeñas
+            topPercent = 0.95; // 15% desde la izquierda de la imagen para pantallas pequeñas
+          }
+          if (hotspotName === 'volver' && window.innerWidth <= 420) {
+            leftPercent = 0.60; // 15% desde la izquierda de la imagen para pantallas pequeñas
+            topPercent = 0.95; // 15% desde la izquierda de la imagen para pantallas pequeñas
+          }
+          
+          // Calcular posición en píxeles relativos al contenedor
+          // Usar las dimensiones CSS para un cálculo más preciso
+          const topPixels = imageOffsetY + (imageHeight * topPercent);
+          const leftPixels = imageOffsetX + (imageWidth * leftPercent);
+          
+          // Aplicar posición en píxeles
+          hotspot.style.top = `${topPixels}px`;
+          hotspot.style.left = `${leftPixels}px`;
+        }
+      }
+    );
   }
 
-  // Selecciona las posiciones back según el ancho de pantalla
-  function getPositionsBack() {
-    const screenWidth = window.innerWidth;
-    
-    if (screenWidth <= 360) {
-      return positionsBack360;         // Para pantallas ≤ 360px
-    } else if (screenWidth <= 400) {
-      return positionsBack400;         // Para pantallas ≤ 400px
-    } else if (screenWidth <= 460) {
-      return positionsBack460;         // Para pantallas ≤ 460px
-    } else if (screenWidth <= 560) {
-      return positionsBack560;         // Para pantallas ≤ 560px
-    } else if (screenWidth <= 805) {
-      return positionsBackMobile;      // Para pantallas ≤ 805px
-    } else {
-      return positionsBack;            // Para pantallas > 805px (desktop)
-    }
-  }
 
-  // Función para forzar actualización de posiciones - LLAMA ESTO DESDE LA CONSOLA
+
+
+
+
+  // Función para forzar actualización de posiciones
   window.forceUpdatePositions = function() {
-    console.log("Current screen width:", window.innerWidth);
-    console.log("Current side:", currentSide);
-    
-    const frontPositions = getPositionsFront();
-    const backPositions = getPositionsBack();
-    
-    console.log("Front positions:", frontPositions);
-    console.log("Back positions:", backPositions);
-    
-    if (currentSide === 'front') {
-      setHotspotPositions(frontPositions);
-    } else {
-      setHotspotPositions(backPositions);
-    }
-    
-    console.log("Positions updated!");
+    const isFrontView = isFront();
+    const positions = getImageBasedPositions(isFrontView);
+    setHotspotPositions(positions);
   };
 
-  // 🔧 FUNCIÓN DE DEBUGGING MEJORADA - USA ESTA PARA VER QUÉ ESTÁ PASANDO
-  window.debugHotspots = function() {
-    const screenWidth = window.innerWidth;
-    console.log("=== DEBUG HOTSPOTS ===");
-    console.log("Screen width:", screenWidth);
-    console.log("Current side:", currentSide);
-    
-    // Mostrar qué conjunto de posiciones se está usando
-    let activePositions;
-    if (currentSide === 'front') {
-      activePositions = getPositionsFront();
-      console.log("Using FRONT positions");
-    } else {
-      activePositions = getPositionsBack();
-      console.log("Using BACK positions");
-    }
-    
-    console.log("Active positions:", activePositions);
-    
-    // Mostrar las posiciones actuales de cada hotspot
-    const hotspots = ['ia', 'bateria', 'sensor', 'motor', 'regulador', 'volver'];
-    hotspots.forEach(hotspotName => {
-      const hotspot = document.querySelector(`.hotspot[data-feature="${hotspotName}"]`);
-      if (hotspot) {
-        console.log(`${hotspotName.toUpperCase()}:`, {
-          computed: {
-            top: hotspot.style.top,
-            left: hotspot.style.left
-          },
-          expected: activePositions[hotspotName]
-        });
-      }
-    });
-    
-    // Mostrar información de la imagen
-    const exoImg = document.querySelector('.exo-main-image');
-    if (exoImg) {
-      console.log("Image info:", {
-        src: exoImg.src,
-        width: exoImg.offsetWidth,
-        height: exoImg.offsetHeight,
-        naturalWidth: exoImg.naturalWidth,
-        naturalHeight: exoImg.naturalHeight
-      });
-    }
-    
-    console.log("=== END DEBUG ===");
-  };
-
-  // 🔧 FUNCIÓN PARA CAMBIAR POSICIONES EN TIEMPO REAL
-  window.setHotspotPosition = function(hotspotName, top, left) {
-    const hotspot = document.querySelector(`.hotspot[data-feature="${hotspotName}"]`);
-    if (hotspot) {
-      hotspot.style.top = top;
-      hotspot.style.left = left;
-      console.log(`Set ${hotspotName} to: top=${top}, left=${left}`);
-    } else {
-      console.log(`Hotspot ${hotspotName} not found`);
-    }
-  };
-
-  // 🔧 FUNCIÓN PARA ACTUALIZAR POSICIONES EN EL CÓDIGO FUENTE
-  window.updatePositionsInCode = function() {
-    const screenWidth = window.innerWidth;
-    const currentSide = window.currentSide || 'front';
-    
-    console.log("=== ACTUALIZAR POSICIONES EN CÓDIGO ===");
-    console.log(`Screen width: ${screenWidth}px`);
-    console.log(`Current side: ${currentSide}`);
-    
-    let targetPositions;
-    if (screenWidth <= 360) {
-      targetPositions = currentSide === 'front' ? 'positionsFront360' : 'positionsBack360';
-    } else if (screenWidth <= 400) {
-      targetPositions = currentSide === 'front' ? 'positionsFront400' : 'positionsBack400';
-    } else if (screenWidth <= 460) {
-      targetPositions = currentSide === 'front' ? 'positionsFront460' : 'positionsBack460';
-    } else if (screenWidth <= 560) {
-      targetPositions = currentSide === 'front' ? 'positionsFront560' : 'positionsBack560';
-    } else if (screenWidth <= 805) {
-      targetPositions = currentSide === 'front' ? 'positionsFrontMobile' : 'positionsBackMobile';
-    } else {
-      targetPositions = currentSide === 'front' ? 'positionsFront' : 'positionsBack';
-    }
-    
-    console.log(`Target variable: ${targetPositions}`);
-    
-    // Mostrar el código actual para copiar y pegar
-    const hotspots = ['ia', 'bateria', 'sensor', 'motor', 'regulador', 'volver'];
-    console.log(`\n// Código para ${targetPositions}:`);
-    console.log(`var ${targetPositions} = {`);
-    
-    hotspots.forEach((hotspotName, index) => {
-      const hotspot = document.querySelector(`.hotspot[data-feature="${hotspotName}"]`);
-      if (hotspot) {
-        const top = hotspot.style.top;
-        const left = hotspot.style.left;
-        const comma = index < hotspots.length - 1 ? ',' : '';
-        console.log(`    ${hotspotName}: { top: "${top}", left: "${left}" }${comma}`);
-      }
-    });
-    
-    console.log(`};\n`);
-    console.log("=== FIN DEL CÓDIGO ===");
-  };
-
+  // Función actualizada para usar el sistema basado en imagen
   function setHotspotPositions(positions) {
-      console.log("Setting positions:", positions); // DEBUG
-      if (hotspotIA) {
-          console.log("Setting IA to:", positions.ia); // DEBUG
-          hotspotIA.style.top = positions.ia.top;
-          hotspotIA.style.left = positions.ia.left;
-      }
-      if (hotspotBateria) {
-          hotspotBateria.style.top = positions.bateria.top;
-          hotspotBateria.style.left = positions.bateria.left;
-      }
-      if (hotspotSensor) {
-          hotspotSensor.style.top = positions.sensor.top;
-          hotspotSensor.style.left = positions.sensor.left;
-      }
-      if (hotspotMotor) {
-          hotspotMotor.style.top = positions.motor.top;
-          hotspotMotor.style.left = positions.motor.left;
-      }
-      if (hotspotRegulador) {
-        hotspotRegulador.style.top = positions.regulador.top;
-        hotspotRegulador.style.left = positions.regulador.left;
-      }
-      if (volverHotspot) {
-          volverHotspot.style.top = positions.volver.top;
-          volverHotspot.style.left = positions.volver.left;
-      }
+      // Usar la nueva función de posicionamiento basado en imagen
+      applyImageBasedPositions(positions);
   }
 
   // Helper to check which image is currently shown
@@ -1236,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
-  // Define transform positions for each panel on front and back
+  // Y - coordenadas  de paneles desciptivos
   const specPanelTransformsFront = {
     'spec-motor': 'translateY(10%)',
     'spec-ia': 'translateY(10%)',
@@ -1261,16 +1058,14 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // CAMBIA EL LA PRIMERA VISTA, MODO DE PRUEBA 
+  
   let currentSide = 'back';
 
   // Helper to update positions on resize
   function updateHotspotPositionsOnResize() {
-    if (currentSide === 'front') {
-      setHotspotPositions(getPositionsFront());
-    } else {
-      setHotspotPositions(getPositionsBack());
-    }
+    const isFrontView = isFront();
+    const positions = getImageBasedPositions(isFrontView);
+    setHotspotPositions(positions);
   }
 
   // Listen for resize events
@@ -1280,7 +1075,8 @@ document.addEventListener('DOMContentLoaded', function() {
       volverHotspot.addEventListener('click', function() {
           if (isFront()) {
               exoImg.src = backImg;
-              setHotspotPositions(getPositionsBack());
+              const positions = getImageBasedPositions(false); // false = back view
+              setHotspotPositions(positions);
               updateHotspotVisibility('back');
               setSpecPanelTransforms(specPanelTransformsBack);
               currentSide = 'back';
@@ -1292,7 +1088,8 @@ document.addEventListener('DOMContentLoaded', function() {
               if (iaPanel) iaPanel.classList.add('active');
           } else {
               exoImg.src = frontImg;
-              setHotspotPositions(getPositionsFront());
+              const positions = getImageBasedPositions(true); // true = front view
+              setHotspotPositions(positions);
               updateHotspotVisibility('front');
               setSpecPanelTransforms(specPanelTransformsFront);
               currentSide = 'front';
@@ -1306,63 +1103,42 @@ document.addEventListener('DOMContentLoaded', function() {
           label.innerHTML = '<i class="fa-solid fa-arrow-rotate-left"></i> Dar la vuelta';
       });
 
-      // Set initial positions for front
-      setHotspotPositions(getPositionsFront());
-      updateHotspotVisibility('front');
-      setSpecPanelTransforms(specPanelTransformsFront);
-      currentSide = 'front';
-      // Show Modulo de Asistencia Motriz panel first on initial load
+      // Set initial positions for back
+      const initialPositions = getImageBasedPositions(false); // false = back view
+      setHotspotPositions(initialPositions);
+      updateHotspotVisibility('back');
+      setSpecPanelTransforms(specPanelTransformsBack);
+      currentSide = 'back';
+      // Show Sistema de control adaptativo panel first on initial load
       document.querySelectorAll('.spec-panel').forEach(function(panel) {
           panel.classList.remove('active');
       });
-      var motorPanel = document.getElementById('spec-motor');
-      if (motorPanel) motorPanel.classList.add('active');
+      var iaPanel = document.getElementById('spec-ia');
+      if (iaPanel) iaPanel.classList.add('active');
   }
 
-  // Detect mobile view and override positions
-  function isMobile() {
-    return window.innerWidth <= 805;
-  }
-  if (isMobile()) {
-    positionsFront = getPositionsFront();
-    positionsBack = getPositionsBack();
-  }
-
-  let lastIsMobile = window.innerWidth <= 805;
-
+  // Función mejorada para manejar cambios de tamaño
   function handleResponsiveChange() {
-    const nowIsMobile = window.innerWidth <= 805;
-    if (nowIsMobile !== lastIsMobile) {
-      // Update positions and visibility for the current side
-      if (currentSide === 'front') {
-        setHotspotPositions(getPositionsFront());
-        updateHotspotVisibility('front');
-        setSpecPanelTransforms(specPanelTransformsFront);
-        // Optionally, reset active panel
-        document.querySelectorAll('.spec-panel').forEach(panel => panel.classList.remove('active'));
-        var motorPanel = document.getElementById('spec-motor');
-        if (motorPanel) motorPanel.classList.add('active');
-      } else {
-        setHotspotPositions(getPositionsBack());
-        updateHotspotVisibility('back');
-        setSpecPanelTransforms(specPanelTransformsBack);
-        // Optionally, reset active panel
-        document.querySelectorAll('.spec-panel').forEach(panel => panel.classList.remove('active'));
-        var iaPanel = document.getElementById('spec-ia');
-        if (iaPanel) iaPanel.classList.add('active');
-      }
-      lastIsMobile = nowIsMobile;
-    } else {
-      // Always update positions on any resize
-      if (currentSide === 'front') {
-        setHotspotPositions(getPositionsFront());
-      } else {
-        setHotspotPositions(getPositionsBack());
-      }
-    }
+    // Con el nuevo sistema basado en imagen, necesitamos recalcular las posiciones
+    const isFrontView = isFront();
+    const positions = getImageBasedPositions(isFrontView);
+    setHotspotPositions(positions);
   }
 
+  // Listener para cambios de tamaño de ventana
   window.addEventListener('resize', handleResponsiveChange);
+  
+  // Listener para cuando la imagen cambie de tamaño (por ejemplo, al cambiar de vista)
+  const image = document.querySelector('.exo-main-image');
+  if (image) {
+    image.addEventListener('load', function() {
+      setTimeout(() => {
+        const isFrontView = isFront();
+        const positions = getImageBasedPositions(isFrontView);
+        setHotspotPositions(positions);
+      }, 100); // Pequeño delay para asegurar que la imagen esté completamente renderizada
+    });
+  }
 });
 
 // ===== MOBILE VISUAL CUE SYSTEM =====
