@@ -2973,9 +2973,15 @@ img {
 .app-mockup {
   flex: 1;
   display: flex;
-  justify-content: center;
+  justify-content: right;
+  margin-right: 100px;
   align-items: center;
   position: relative;
+}
+@media (max-width: 1000px) {
+  .app-mockup {
+    margin-right: 0;
+  }
 }
 
 .phone-frame {
