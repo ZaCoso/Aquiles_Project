@@ -31,6 +31,7 @@ BLDCMotor motor = BLDCMotor(7);                  // Motor con 7 pares de polos
 BLDCDriver3PWM driver = BLDCDriver3PWM(5, 6, 7); // Pines PWM para el driver
 MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C); // Sensor AS5600 por I2C
 AS5048A encoder_spi(5);
+
 // --- CRC helper ---
 uint8_t crc8_sum(const uint8_t* d, size_t n) {
   uint16_t s = 0;
