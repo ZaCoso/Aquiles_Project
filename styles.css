@@ -33,13 +33,6 @@ body {
   position: relative;
 }
 
-/* Zoom para desktop (pantallas mayores a 1000px) */
-@media (min-width: 1001px) {
-  body {
-    zoom: 67%;
-  }
-}
-
 
 
 /* ===== NUEVOS ESTILOS PARA AQUILES A1 REDISEÑADO ===== */
