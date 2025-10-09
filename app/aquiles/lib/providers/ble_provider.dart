@@ -1,5 +1,7 @@
 // lib/providers/ble_provider.dart
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:aquiles/mocks/fake_ble.dart';
 import 'package:aquiles/services/ble_services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
@@ -8,16 +10,45 @@ final flutterBleProvider = Provider<FlutterReactiveBle>((ref) {
   return FlutterReactiveBle();
 });
 
-final bleServiceProvider = Provider<BleService>((ref) {
-  final ble = ref.watch(flutterBleProvider);
-  return BleService(
-    ble,
-    Uuid.parse("6e400001-b5a3-f393-e0a9-e50e24dcca9e"), // service UUID
-    Uuid.parse("6e400002-b5a3-f393-e0a9-e50e24dcca9e"), // TX (App -> ESP32)
-    Uuid.parse(
-        "6e400002-b5a3-f393-e0a9-e50e24dcca9e"), // RX (ESP32 -> App) - SAME UUID!
-  );
-});
+final bleServiceProvider = Provider<BleService>((ref) => FakeBleService(
+      initialDevices: [
+        DiscoveredDevice(
+          id: '00:11:22:33:44:55',
+          name: 'Aquiles X1',
+          serviceData: {},
+          manufacturerData: Uint8List.fromList([
+            72,
+            101,
+            108,
+            108,
+            111
+          ]), // Uint8List.fromList([72, 101, 108, 108, 111]),
+          rssi: -50,
+          serviceUuids: [],
+        ),
+        DiscoveredDevice(
+          id: '66:77:88:99:AA:BB',
+          name: 'Aquiles X1',
+          serviceData: {},
+          manufacturerData: Uint8List(0),
+          rssi: -60,
+          serviceUuids: [],
+        ),
+      ],
+      serviceUuid: Uuid.parse("6e400001-b5a3-f393-e0a9-e50e24dcca9e"),
+      txUuid: Uuid.parse("6e400002-b5a3-f393-e0a9-e50e24dcca9e"),
+      rxUuid: Uuid.parse("6e400002-b5a3-f393-e0a9-e50e24dcca9e"),
+    )); // Provider<FakeBleService>
+// Provider<BleService>((ref) {
+//   final ble = ref.watch(flutterBleProvider);
+//   return BleService(
+//     ble,
+//     Uuid.parse("6e400001-b5a3-f393-e0a9-e50e24dcca9e"), // service UUID
+//     Uuid.parse("6e400002-b5a3-f393-e0a9-e50e24dcca9e"), // TX (App -> ESP32)
+//     Uuid.parse(
+//         "6e400002-b5a3-f393-e0a9-e50e24dcca9e"), // RX (ESP32 -> App) - SAME UUID!
+//   );
+// });
 
 final notificationStreamProvider = StreamProvider<String>((ref) {
   final ble = ref.watch(bleServiceProvider);
@@ -42,7 +73,8 @@ class BleScanState {
     List<DiscoveredDevice>? devices,
     String? error,
     bool? showIndicator,
-  }) => BleScanState(
+  }) =>
+      BleScanState(
         scanning: scanning ?? this.scanning,
         devices: devices ?? this.devices,
         error: error,
@@ -75,17 +107,30 @@ class BleScanNotifier extends StateNotifier<BleScanState> {
         _tracked[device.id] = _TrackedDevice(device: device, lastSeen: now);
         if (firstTime) {
           final name = device.name.isNotEmpty ? device.name : 'Dispositivo BLE';
-          print('[BLE] Found: ' + name + ' (' + device.id + ') RSSI ' + device.rssi.toString());
+          print('[BLE] Found: ' +
+              name +
+              ' (' +
+              device.id +
+              ') RSSI ' +
+              device.rssi.toString());
         }
         final updated = _tracked.values.map((e) => e.device).toList();
         state = state.copyWith(devices: updated);
         final summary = updated
-            .map((d) => (d.name.isNotEmpty ? d.name : 'Dispositivo BLE') + ' (' + d.id + ')')
+            .map((d) =>
+                (d.name.isNotEmpty ? d.name : 'Dispositivo BLE') +
+                ' (' +
+                d.id +
+                ')')
             .join(', ');
-        print('[BLE] Devices so far (' + updated.length.toString() + '): ' + summary);
+        print('[BLE] Devices so far (' +
+            updated.length.toString() +
+            '): ' +
+            summary);
       },
       onError: (e) {
-        state = state.copyWith(scanning: false, error: e.toString(), showIndicator: false);
+        state = state.copyWith(
+            scanning: false, error: e.toString(), showIndicator: false);
         print('[BLE] Scan error: ' + e.toString());
       },
     );
@@ -111,8 +156,13 @@ class BleScanNotifier extends StateNotifier<BleScanState> {
       if (toRemove.isNotEmpty) {
         for (final id in toRemove) {
           final dev = _tracked.remove(id)?.device;
-          final name = (dev?.name.isNotEmpty ?? false) ? dev!.name : 'Dispositivo BLE';
-          print('[BLE] Pruned stale device (no recent adverts): ' + name + ' (' + id + ')');
+          final name =
+              (dev?.name.isNotEmpty ?? false) ? dev!.name : 'Dispositivo BLE';
+          print('[BLE] Pruned stale device (no recent adverts): ' +
+              name +
+              ' (' +
+              id +
+              ')');
         }
         final updated = _tracked.values.map((e) => e.device).toList();
         state = state.copyWith(devices: updated);
@@ -127,9 +177,16 @@ class BleScanNotifier extends StateNotifier<BleScanState> {
     _pruneTimer = null;
     state = state.copyWith(scanning: false, showIndicator: false);
     final list = state.devices
-        .map((d) => (d.name.isNotEmpty ? d.name : 'Dispositivo BLE') + ' (' + d.id + ')')
+        .map((d) =>
+            (d.name.isNotEmpty ? d.name : 'Dispositivo BLE') +
+            ' (' +
+            d.id +
+            ')')
         .join(', ');
-    print('[BLE] Stopped scan. Devices found (' + state.devices.length.toString() + '): ' + list);
+    print('[BLE] Stopped scan. Devices found (' +
+        state.devices.length.toString() +
+        '): ' +
+        list);
   }
 
   void removeDevice(String deviceId) {
