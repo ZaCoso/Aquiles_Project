@@ -51,7 +51,7 @@ class _StepDetailScreenState extends State<StepDetailScreen> {
 
   void _handleNext(BuildContext context) {
     if (_currentStepIndex >= _steps.length - 1) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).pushReplacementNamed('/device-scan');
       return;
     }
     setState(() {

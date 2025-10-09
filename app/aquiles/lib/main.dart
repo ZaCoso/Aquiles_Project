@@ -9,6 +9,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/instructions_screen.dart';
 import 'screens/step_detail_screen.dart';
+import 'screens/device_scan_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,6 +68,7 @@ class AquilesApp extends StatelessWidget {
         '/instructions': (context) => const InstructionsScreen(),
         '/instructions/step': (context) => const StepDetailScreen(),
         '/profile': (context) => const ProfileScreen(),
+        '/device-scan': (context) => const DeviceScanScreen(),
       },
     );
   }
