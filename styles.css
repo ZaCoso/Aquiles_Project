@@ -2022,8 +2022,8 @@ body::before {
 
 
 .container1 {
-  width: 100%;
-  max-width: 1700px;
+  /* width: 100%;
+  max-width: 1700px; */
   margin: 0 auto;
   padding: 0 20px;
   position: relative;
