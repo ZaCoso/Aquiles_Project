@@ -11,10 +11,14 @@ void setup() {
 
     BLE::init();
 
-    // Si querés activar SPI:
-    // SPIBus::init();
-    // xTaskCreate(SPIBus::vSpiTask_RP2040, "SPI_RP2040", tskSPI_TX_STACK, nullptr, tskSPI_TX_PRIORITY, nullptr);
-    // xTaskCreate(SPIBus::vSpiTask_DevB,   "SPI_DEV_B",  tskSPI_TX_STACK, nullptr, tskSPI_TX_PRIORITY, nullptr);
+    Aquiles::Detection::GlobalCfg cfg;      // defaults OK
+    cfg.intent.omega_min  = 1.0f;
+    cfg.intent.acc_min_g  = 0.30f;
+    cfg.limits.I_max      = 6.0f;
+    cfg.slew_per_tick     = 0.08f;         // rampa
+    Aquiles::Detection::begin(cfg);
+    Aquiles::SPIBus::init();
+    Aquiles::SPIBus::startTickTask();
 }
 
 void loop() {

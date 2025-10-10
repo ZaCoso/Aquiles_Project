@@ -136,15 +136,17 @@ namespace Aquiles {
     }
 
     namespace SPIBus {
-        void init();
-        bool rp2040_send_packet(int16_t v1, int16_t v2, int16_t v3,
-                                uint8_t resp6[6], uint32_t timeout_ms = 20);
-        bool devB_transfer(const uint8_t* tx, uint8_t* rx, size_t n);
-        uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init = 0x00);
-        void parse_triplet(const uint8_t* p, int16_t& a, int16_t& b, int16_t& c);
+  
+        // ===== Inicialización y tareas =====
+        void init();            // Inicializa el bus SPI (pines, mutex, etc.)
+        void startTickTask();   // Crea la tarea que realiza el ciclo L→R
 
-        void vSpiTask_RP2040(void* pv);
-        void vSpiTask_DevB(void* pv);
+        // ===== Utilitarios (opcional) =====
+        uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init = 0x00);
+        float q15_to_rad(int16_t q);
+        float q14_to_g(int16_t q);
+        int16_t amps_to_q15(float a);
+
     }
 
     namespace Tasks {

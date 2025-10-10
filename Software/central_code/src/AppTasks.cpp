@@ -300,125 +300,147 @@ namespace Aquiles {
     }
 
     // ================= SPI BUS =================
-    namespace SPIBus {
+    namespace SPIBus {  
+        using Detection::Leg;
 
-        static SPISettings RP2040_SETTINGS(1000000, MSBFIRST, SPI_MODE0);
-        static SPISettings DEV_B_SETTINGS(8000000, MSBFIRST, SPI_MODE3);
+        // =================== CONFIG ===================
+        static SPISettings RP2040_SETTINGS(8000000, MSBFIRST, SPI_MODE0);
 
         static SemaphoreHandle_t spiMutex = nullptr;
-
         static inline void lock()   { xSemaphoreTake(spiMutex, portMAX_DELAY); }
         static inline void unlock() { xSemaphoreGive(spiMutex); }
         static inline uint8_t xfer(uint8_t b) { return SPI.transfer(b); }
 
+        // Pines (ajustá según tu hardware)
+        static constexpr int CS_L = 5;    // CS pierna izquierda
+        static constexpr int CS_R = 17;   // CS pierna derecha
+        static constexpr int PIN_SCK  = 18;
+        static constexpr int PIN_MISO = 19;
+        static constexpr int PIN_MOSI = 23;
+
+        // =================== Protocolo ===================
+        static constexpr uint8_t PROTO_VERSION = 0x01;
+        static constexpr uint8_t ACT_SOF = 0x5A;
+        static constexpr uint8_t TEL_SOF = 0xA5;
+        static constexpr size_t  ACT_SIZE = 16;
+        static constexpr size_t  TEL_SIZE = 36;
+        static constexpr uint8_t TEL_LEN_FIELD = 35;
+
+        #pragma pack(push,1)
+        struct ActuationCmdV1 {
+          uint8_t  sof, version, len, seq;
+          uint8_t  mode, rsv0;
+          int16_t  tgt_q15, kp_q15, kd_q15;
+          uint16_t limits;
+          uint8_t  rsv1, crc8;
+        };
+
+        struct TelemetryFrameV1 {
+          uint8_t  sof, version, len, seq;
+          uint32_t t_us;
+          uint16_t flags, sample_hz;
+          int16_t  enc_q15;
+          int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
+          int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
+          uint16_t err_code, frame_ctr;
+          uint8_t  reserved[5], crc8;
+        };
+        #pragma pack(pop)
+
+        // =================== Utilitarios ===================
         uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init) {
-            uint8_t crc = init;
-            for (size_t i = 0; i < len; ++i) {
-                crc ^= data[i];
-                for (uint8_t k = 0; k < 8; ++k)
-                    crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
-            }
-            return crc;
+          uint8_t crc = init;
+          for (size_t i = 0; i < len; ++i) {
+            crc ^= data[i];
+            for (uint8_t k = 0; k < 8; ++k)
+              crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+          }
+          return crc;
         }
 
+        float q15_to_rad(int16_t q)   { return (float)q * (float)M_PI / 32768.0f; }
+        float q14_to_g(int16_t q)     { return (float)q / 16384.0f; }
+        int16_t amps_to_q15(float a)  { return (int16_t)lrintf(a * 1024.0f); }
+
+        // =================== Helpers ===================
+        static bool validateTelemetry(const TelemetryFrameV1& f) {
+          if (f.sof != TEL_SOF || f.version != PROTO_VERSION || f.len != TEL_LEN_FIELD)
+            return false;
+          uint8_t calc = crc8_sum(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE - 1);
+          return (calc == f.crc8);
+        }
+
+        static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float setpoint_amps) {
+          memset(&c, 0, sizeof(c));
+          c.sof = ACT_SOF;  c.version = PROTO_VERSION;  c.len = ACT_SIZE - 1;
+          c.seq = seq;      c.mode = 1; // torque
+          c.tgt_q15 = amps_to_q15(setpoint_amps);
+          c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1);
+        }
+
+        static void ingestTelemetry(const TelemetryFrameV1& f, Leg leg) {
+          Detection::SampleIn s{};
+          s.ts_us       = f.t_us;
+          s.theta_rad   = q15_to_rad(f.enc_q15);
+          s.accel_fwd_g = q14_to_g(f.mpu_ax_q14);
+          s.imu_sat     = (f.flags & (1u << 5)) != 0;
+          Detection::pushSample(leg, s);
+        }
+
+        static bool xfer_one(uint8_t csPin, const ActuationCmdV1& cmd, TelemetryFrameV1& outFrame) {
+          lock();
+          SPI.beginTransaction(RP2040_SETTINGS);
+          digitalWrite(csPin, LOW);
+
+          const uint8_t* tx = reinterpret_cast<const uint8_t*>(&cmd);
+          for (size_t i = 0; i < ACT_SIZE; ++i) (void)xfer(tx[i]);
+
+          uint8_t* rx = reinterpret_cast<uint8_t*>(&outFrame);
+          for (size_t i = 0; i < TEL_SIZE; ++i) rx[i] = xfer(0x00);
+
+          digitalWrite(csPin, HIGH);
+          SPI.endTransaction();
+          unlock();
+          return validateTelemetry(outFrame);
+        }
+
+        // =================== Tarea SPI ===================
+        static void vSpiTickTask(void*) {
+          TickType_t last = xTaskGetTickCount();
+          uint8_t seq = 0;
+
+          for (;;) {
+            ++seq;
+
+            auto cmdL = Detection::getCmd(Leg::L);
+            auto cmdR = Detection::getCmd(Leg::R);
+
+            ActuationCmdV1 cL{}, cR{};
+            buildActCmd(cL, seq, cmdL.setpoint);
+            buildActCmd(cR, seq, cmdR.setpoint);
+
+            TelemetryFrameV1 fL{}, fR{};
+            bool okL = xfer_one(CS_L, cL, fL);
+            if (okL) ingestTelemetry(fL, Leg::L);
+
+            bool okR = xfer_one(CS_R, cR, fR);
+            if (okR) ingestTelemetry(fR, Leg::R);
+
+            vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
+          }
+        }
+
+        // =================== API pública ===================
         void init() {
-            pinMode(CS_RP2040, OUTPUT); digitalWrite(CS_RP2040, HIGH);
-            pinMode(CS_DEV_B,  OUTPUT); digitalWrite(CS_DEV_B,  HIGH);
-            SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, CS_RP2040);
-            if (!spiMutex) spiMutex = xSemaphoreCreateMutex();
-            Serial.println("SPI Bus listo (un bus, múltiples CS).");
+          pinMode(CS_L, OUTPUT); digitalWrite(CS_L, HIGH);
+          pinMode(CS_R, OUTPUT); digitalWrite(CS_R, HIGH);
+          SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, CS_L);
+          if (!spiMutex) spiMutex = xSemaphoreCreateMutex();
+          Serial.println("[SPIBus] Inicializado (dos CS: L/R).");
         }
 
-        bool rp2040_send_packet(int16_t v1, int16_t v2, int16_t v3,
-                                uint8_t resp6[6], uint32_t timeout_ms)
-        {
-            uint8_t frame[9] = {
-                0xAA, 6,
-                (uint8_t)(v1 & 0xFF), (uint8_t)((v1 >> 8) & 0xFF),
-                (uint8_t)(v2 & 0xFF), (uint8_t)((v2 >> 8) & 0xFF),
-                (uint8_t)(v3 & 0xFF), (uint8_t)((v3 >> 8) & 0xFF),
-                0
-            };
-            frame[8] = crc8_sum(&frame[2], 6);
-
-            lock();
-            SPI.beginTransaction(RP2040_SETTINGS);
-            digitalWrite(CS_RP2040, LOW);
-
-            for (auto b : frame) (void)xfer(b);
-
-            uint32_t t0 = millis();
-            size_t got = 0;
-            while (got < 6) {
-                resp6[got++] = xfer(0x00);
-                if ((millis() - t0) > timeout_ms) {
-                    digitalWrite(CS_RP2040, HIGH);
-                    SPI.endTransaction();
-                    unlock();
-                    return false;
-                }
-            }
-
-            digitalWrite(CS_RP2040, HIGH);
-            SPI.endTransaction();
-            unlock();
-            return true;
-        }
-
-        bool devB_transfer(const uint8_t* tx, uint8_t* rx, size_t n) {
-            if (!n) return true;
-            lock();
-            SPI.beginTransaction(DEV_B_SETTINGS);
-            digitalWrite(CS_DEV_B, LOW);
-
-            for (size_t i = 0; i < n; ++i) {
-                uint8_t t = tx ? tx[i] : 0x00;
-                uint8_t r = xfer(t);
-                if (rx) rx[i] = r;
-            }
-
-            digitalWrite(CS_DEV_B, HIGH);
-            SPI.endTransaction();
-            unlock();
-            return true;
-        }
-
-        void parse_triplet(const uint8_t* p, int16_t& a, int16_t& b, int16_t& c) {
-            a = (int16_t)(p[0] | (p[1] << 8));
-            b = (int16_t)(p[2] | (p[3] << 8));
-            c = (int16_t)(p[4] | (p[5] << 8));
-        }
-
-        void vSpiTask_RP2040(void* /*pv*/) {
-            int16_t v1 = 100, v2 = -200, v3 = 300;
-            uint8_t rx6[6];
-            for (;;) {
-                bool ok = rp2040_send_packet(v1, v2, v3, rx6, 20);
-                if (ok) {
-                    int16_t r1, r2, r3;
-                    parse_triplet(rx6, r1, r2, r3);
-                    Serial.printf("[RP2040] RESP: %d, %d, %d\r\n", r1, r2, r3);
-                } else {
-                    Serial.println("[RP2040] Timeout/FAIL");
-                }
-                v1 += 1; v2 -= 2; v3 += 3;
-                vTaskDelay(pdMS_TO_TICKS(100));
-            }
-        }
-
-        void vSpiTask_DevB(void* /*pv*/) {
-            uint8_t tx[3] = {0x9F, 0x00, 0x00};
-            uint8_t rx[3];
-            for (;;) {
-                bool ok = devB_transfer(tx, rx, sizeof(tx));
-                if (ok) {
-                    Serial.printf("[DEV_B] RX: %02X %02X %02X\r\n", rx[0], rx[1], rx[2]);
-                } else {
-                    Serial.println("[DEV_B] FAIL");
-                }
-                vTaskDelay(pdMS_TO_TICKS(500));
-            }
+        void startTickTask() {
+          xTaskCreatePinnedToCore(vSpiTickTask, "SpiTick", 4096, nullptr, 5, nullptr, 1);
         }
     } // namespace SPIBus
-
 } // namespace Aquiles
