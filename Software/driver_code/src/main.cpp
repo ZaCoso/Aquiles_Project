@@ -32,7 +32,8 @@ BLDCDriver3PWM driver = BLDCDriver3PWM(5, 6, 7); // Pines PWM para el driver
 MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C); // Sensor AS5600 por I2C
 AS5048A encoder_spi(5);
 
-
+float encoder_5600();   // devuelve ángulo del AS5600 en radianes (0..2π)
+std::vector<float> readMPU6050();  
 
 namespace DriverSPI {
 
@@ -91,14 +92,12 @@ namespace DriverSPI {
       return c;
     }
     static inline uint32_t micros32() { return (uint32_t) to_us_since_boot(get_absolute_time()); }
-    static inline int16_t rad_to_q15(float rad) { return (int16_t)(rad * (32768.0f / (float)M_PI)); }
+    static inline int16_t rad_to_q15(float rad) { return  (int16_t)((rad / (2.0f * (float)M_PI)) * 32768.0f);}
     static inline int16_t g_to_q14(float g)     { return (int16_t)(g * 16384.0f); }
-
+    static inline int16_t gyro_to_q15(float rad_per_s, float max_rad_per_s) { return (int16_t)((rad_per_s / max_rad_per_s) * 32768.0f); }
     // ===================== Sensores (stub de ejemplo) =====================
-    static float angle_stub = 0.0f;
+
     static void fillTelemetry(TelemetryFrameV1& f) {
-      // DEMO: ángulo girando suave
-      angle_stub += 0.01f; if (angle_stub > 2.0f*(float)M_PI) angle_stub -= 2.0f*(float)M_PI;
 
       f.sof       = TEL_SOF;
       f.version   = PROTO_VERSION;
@@ -107,15 +106,15 @@ namespace DriverSPI {
       f.t_us      = micros32();
       f.flags     = 0;
       f.sample_hz = 1000;                 // 1 kHz
-      f.enc_q15   = rad_to_q15(angle_stub);
-
+      f.enc_q15   = rad_to_q15(encoder_5600());
+      auto mpu_data = readMPU6050();  // actualizar datos del MPU6050
       // IMU demo (dejar en 0/1g)
-      f.mpu_ax_q14 = g_to_q14(0.0f);
-      f.mpu_ay_q14 = g_to_q14(0.0f);
-      f.mpu_az_q14 = g_to_q14(1.0f);
-      f.mpu_gx_q14 = g_to_q14(0.0f);
-      f.mpu_gy_q14 = g_to_q14(0.0f);
-      f.mpu_gz_q14 = g_to_q14(0.0f);
+      f.mpu_ax_q14 = g_to_q14(mpu_data[0]);
+      f.mpu_ay_q14 = g_to_q14(mpu_data[1]);
+      f.mpu_az_q14 = g_to_q14(mpu_data[2]);
+      f.mpu_gx_q14 = gyro_to_q15(mpu_data[3], 4.3633f);
+      f.mpu_gy_q14 = gyro_to_q15(mpu_data[4], 4.3633f);
+      f.mpu_gz_q14 = gyro_to_q15(mpu_data[5], 4.3633f);
 
       f.err_code  = 0;
       f.frame_ctr = (uint16_t)(g_frame_ctr & 0xFFFF);
@@ -267,7 +266,7 @@ void MotorVelMove(float vel) {
 
 
 // --- Función para leer y mostrar datos ---
-void readMPU6050() {
+std::vector<float> readMPU6050() {
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
 
@@ -284,23 +283,20 @@ void readMPU6050() {
   Serial.print(g.gyro.y);
   Serial.print(" Z:");
   Serial.println(g.gyro.z);
-
-  Serial.print("Temperatura: ");
-  Serial.print(temp.temperature);
-  Serial.println(" *C");
-
-  Serial.println("---------------------------");
+  float gravity = 9.80665f;
+  return {a.acceleration.x/gravity, 
+    a.acceleration.y/gravity, 
+    a.acceleration.z/gravity , 
+    g.gyro.x, g.gyro.y, g.gyro.z};
 }
 
-void encoder_5600(){
-  int rawAngle = encoder_i2c.rawAngle();       // 0–4095
-  float grados = rawAngle * 360.0 / 4096;  // Conversión a grados
-  Serial.print("Raw: ");
-  Serial.print(rawAngle);
+float encoder_5600(){
+  uint16_t raw = encoder_i2c.readAngle();       // 0–4095
+  float grados = raw * 360.0 / 4096;  // Conversión a grados
   Serial.print("Ángulo: ");
   Serial.print(grados, 2);
   Serial.println("°");
-  delay(200);
+  return ((raw * 2.0f * (float)M_PI) / 4096.0f);
 }
 void encoder_5048(){}
 void encoder_init(){
@@ -321,7 +317,7 @@ void setup() {
   Wire1.setSDA(14);
   Wire1.setSCL(15);
   Wire1.begin();  
-  // // mpu.begin();     
+  mpu.begin();     
   DriverSPI::begin();
 
 
