@@ -2,7 +2,7 @@
 #include <Wire.h>
 #define Wire Wire1  
 #include <AS5600.h>
-#include <AS5048A.h>
+
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_NeoPixel.h>
 #include <Adafruit_Sensor.h>
@@ -28,9 +28,7 @@ Adafruit_MPU6050 mpu;
 
 // --- Definición de hardware ---
 BLDCMotor motor = BLDCMotor(7);                  // Motor con 7 pares de polos
-BLDCDriver3PWM driver = BLDCDriver3PWM(5, 6, 7); // Pines PWM para el driver
-MagneticSensorI2C sensor = MagneticSensorI2C(AS5600_I2C); // Sensor AS5600 por I2C
-AS5048A encoder_spi(5);
+BLDCDriver3PWM driver = BLDCDriver3PWM(1, 5, 3); // Pines PWM para el driver
 
 float encoder_5600();   // devuelve ángulo del AS5600 en radianes (0..2π)
 std::vector<float> readMPU6050();  
@@ -234,17 +232,16 @@ namespace DriverSPI {
 // --- Función para inicializar SimpleFOC ---
 void initSimpleFOC() {
   // Inicializar sensor
-  sensor.init();
-  motor.linkSensor(&sensor);
-
+  
   // Configurar driver
   driver.voltage_power_supply = 5;   // Voltaje de alimentación del driver
   driver.init();
+  driver.pwm_frequency = 30000; // Frecuencia PWM en Hz
   motor.linkDriver(&driver);
 
-  // Seleccionar tipo de control
-  motor.controller = MotionControlType::angle;
 
+  motor.controller = MotionControlType::velocity_openloop;
+  
   // Inicializar motor y FOC
   motor.init();
   motor.initFOC();
@@ -298,7 +295,7 @@ float encoder_5600(){
   Serial.println("°");
   return ((raw * 2.0f * (float)M_PI) / 4096.0f);
 }
-void encoder_5048(){}
+
 void encoder_init(){
   if (!encoder_i2c.begin()) {
     Serial.println("AS5600 no encontrado!");
@@ -321,17 +318,20 @@ void setup() {
   DriverSPI::begin();
 
 
-  encoder_i2c.begin();
-  encoder_i2c.setDirection(AS5600_CLOCK_WISE);
+  // encoder_i2c.begin();
+  // encoder_i2c.setDirection(AS5600_CLOCK_WISE);
   // init_spi_slave();
-  // initSimpleFOC();
+  initSimpleFOC();
   pixels.begin();
   pixels.clear();
   pixels.show();
 }
 
 void loop() {
-  encoder_5600();
+  motor.loopFOC();
+  MotorVelMove(1);
+  // encoder_5600();
+  Serial.print("dsd");
   pixels.setPixelColor(0, pixels.Color(0, 0, 255));
   pixels.show();
   delay(100);
