@@ -2,7 +2,7 @@
 
 namespace Aquiles {
     namespace Detection {
-
+    
       // ========= Estado interno =========
       static GlobalCfg CFG;
 
@@ -318,7 +318,18 @@ namespace Aquiles {
     // ================= SPI BUS =================
     namespace SPIBus {  
         using Detection::Leg;
+        // --- Overcurrent flag enviado por el RP2040 ---
+        static constexpr uint16_t FLAG_OC = (1u << 0);
 
+        // --- Hold local: cuánto tiempo mantener setpoint=0 tras OC ---
+        static uint32_t hold_until_L_ms = 0;
+        static uint32_t hold_until_R_ms = 0;
+
+        // Helper de tiempo en milisegundos
+        #include <esp_timer.h>
+        static inline uint32_t now_ms() {
+          return (uint32_t)(esp_timer_get_time() / 1000ULL);
+        }
         // =================== CONFIG ===================
         static SPISettings RP2040_SETTINGS(8000000, MSBFIRST, SPI_MODE0);
 
@@ -341,6 +352,7 @@ namespace Aquiles {
         static constexpr size_t  ACT_SIZE = 16;
         static constexpr size_t  TEL_SIZE = 36;
         static constexpr uint8_t TEL_LEN_FIELD = 35;
+  
 
         #pragma pack(push,1)
         struct ActuationCmdV1 {
@@ -406,6 +418,15 @@ namespace Aquiles {
           s.accel_fwd_g = q14_to_g(f.mpu_ax_q14);
           s.imu_sat     = (f.flags & (1u << 5)) != 0;
           Detection::pushSample(leg, s);
+          // --- Detecta sobrecorriente proveniente del RP2040 ---
+          if (f.flags & FLAG_OC) {
+            uint32_t t = now_ms();
+            if (leg == Leg::L) hold_until_L_ms = t + 200;  // mantener 200 ms
+            else               hold_until_R_ms = t + 200;
+
+            // Opcional: fijar el ángulo como meta final (simular fin de paso)
+            Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
+          }
         }
 
         static bool xfer_one(uint8_t csPin, const ActuationCmdV1& cmd, TelemetryFrameV1& outFrame) {
@@ -435,6 +456,17 @@ namespace Aquiles {
 
             auto cmdL = Detection::getCmd(Leg::L);
             auto cmdR = Detection::getCmd(Leg::R);
+            // --- Detecta sobrecorriente proveniente del RP2040 ---
+            auto kill_if_hold = [&](Leg leg, Aquiles::Detection::CmdOut& cmd){
+            uint32_t t = now_ms();
+            if (leg == Leg::L) {
+                if (t < hold_until_L_ms) cmd.setpoint = 0.0f;
+              } else {
+            if (t < hold_until_R_ms) cmd.setpoint = 0.0f;
+              }
+            };
+            kill_if_hold(Leg::L, cmdL);
+            kill_if_hold(Leg::R, cmdR);
 
             ActuationCmdV1 cL{}, cR{};
             buildActCmd(cL, seq, cmdL.setpoint);

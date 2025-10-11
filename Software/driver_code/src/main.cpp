@@ -12,6 +12,11 @@
 #include "hardware/irq.h"
 #include "hardware/sync.h"
 #include "hardware/timer.h"
+#include "hardware/adc.h"   
+
+#include <vector>
+#include <cstring>
+#include <cmath>
 
 #define EN1 0
 #define EN2 4
@@ -32,7 +37,8 @@ BLDCDriver3PWM driver = BLDCDriver3PWM(1, 5, 3); // Pines PWM para el driver
 
 float encoder_5600();   // devuelve ángulo del AS5600 en radianes (0..2π)
 std::vector<float> readMPU6050();  
-
+// Flag en Telemetry.flags para avisar sobrecorriente al master
+static constexpr uint16_t FLAG_OC = (1u << 0);
 namespace DriverSPI {
     static volatile uint32_t g_last_cmd_us = 0;
     // ===================== Config y protocolo =====================
@@ -53,6 +59,9 @@ namespace DriverSPI {
     static constexpr size_t   TEL_SIZE       = 36;
     static constexpr uint8_t  TEL_LEN_FIELD  = 35;
 
+    // Flag de sobrecorriente para avisar al master
+    static constexpr uint16_t FLAG_OC = (1u << 0);
+
     #pragma pack(push,1)
     struct ActuationCmdV1 {
       uint8_t  sof, version, len, seq;
@@ -72,7 +81,6 @@ namespace DriverSPI {
       uint8_t  reserved[5], crc8;
     };
     #pragma pack(pop)
-
     // ===================== Estado interno =====================
     static repeating_timer_t g_tim;
     static volatile TelemetryFrameV1 g_tx_buf[2];
@@ -83,19 +91,107 @@ namespace DriverSPI {
     static volatile bool     g_started   = false;
     static volatile ActuationCmdV1 g_last_cmd{};
 
+    // ===================== Estado interno =====================
+    // --- Snapshot de sensores para usar en fillTelemetry() ---
+    struct SensorSnap {
+      float enc_rad;                 // 0..2π
+      float ax_g, ay_g, az_g;
+      float gx_rads, gy_rads, gz_rads;
+      float iA, iB, iC;              // corrientes por fase [A]
+      float i_peak;                  // max(|Ia|,|Ib|,|Ic|)
+      uint8_t phase_peak;            // 0=A, 1=B, 2=C
+      bool overcurrent;              // latch de OC
+      uint32_t t_us;
+    };
+    static volatile SensorSnap g_snap = {};
+    static volatile uint32_t   g_oc_hold_until_ms = 0;
+
     // ===================== Utils =====================
     static inline uint8_t crc8_0x07(const uint8_t* d, size_t n, uint8_t init = 0x00) {
       uint8_t c = init;
       for (size_t i=0;i<n;i++){ c ^= d[i]; for (uint8_t k=0;k<8;k++) c = (c & 0x80) ? (uint8_t)((c<<1) ^ 0x07) : (uint8_t)(c<<1); }
       return c;
     }
+
     static inline uint32_t micros32() { return (uint32_t) to_us_since_boot(get_absolute_time()); }
     static inline int16_t rad_to_q15(float rad) { return  (int16_t)((rad / (2.0f * (float)M_PI)) * 32768.0f);}
     static inline int16_t g_to_q14(float g)     { return (int16_t)(g * 16384.0f); }
     static inline int16_t gyro_to_q15(float rad_per_s, float max_rad_per_s) { return (int16_t)((rad_per_s / max_rad_per_s) * 32768.0f); }
     // ===================== Sensores (stub de ejemplo) =====================
 
+    static inline uint32_t micros32() { return (uint32_t) to_us_since_boot(get_absolute_time()); }
+    static inline int16_t rad_to_q15(float rad) { return  (int16_t)((rad / (2.0f * (float)M_PI)) * 32768.0f);}
+    static inline int16_t g_to_q14(float g)     { return (int16_t)(g * 16384.0f); }
+    static inline int16_t gyro_to_q15(float rad_per_s, float max_rad_per_s) { return (int16_t)((rad_per_s / max_rad_per_s) * 32768.0f); }
+    static inline int16_t amps_to_q15(float a){ return (int16_t)lrintf(a * 1024.0f); }
+
+    // ====== Calibración Corriente ACS712-05B ======
+    static constexpr float VREF_V      = 3.3f;       // tensión que ve el ADC (tras divisor)
+    static constexpr float ADC_COUNTS  = 4095.0f;
+    // Si hay divisor: KDIV = V_adc/V_sensor. SIN divisor = 1.0 (¡cuidado 5V!)
+    static constexpr float KDIV        = 1.0f;       // <--- AJUSTÁ si usás divisor
+    static constexpr float SENS_SENSOR_VperA = 0.185f;                    // 05B
+    static constexpr float SENS_ADC_VperA    = SENS_SENSOR_VperA * KDIV;  // lo que ve el ADC
+
+    struct PhaseCal {
+      float gain_VperA;   // V/A que ve el ADC
+      float offset_V;     // V de offset en el ADC (se mide en autocal)
+      int   adc_ch;       // 0,1,2 => ADC0/1/2 => GPIO26/27/28
+    };
+    static PhaseCal CAL_A{ SENS_ADC_VperA, VREF_V*0.5f, 0 };
+    static PhaseCal CAL_B{ SENS_ADC_VperA, VREF_V*0.5f, 1 };
+    static PhaseCal CAL_C{ SENS_ADC_VperA, VREF_V*0.5f, 2 };
+
+    static float autocal_offset_V(int adc_ch, int samples=256) {
+      float acc = 0;
+      adc_select_input(adc_ch);
+      for (int i=0;i<samples;i++){
+        uint16_t raw = adc_read();
+        acc += (raw * VREF_V) / ADC_COUNTS;
+        sleep_us(50);
+      }
+      return acc / samples;
+    }
+    static inline float adc_to_V(int adc_ch) {
+      adc_select_input(adc_ch);
+      uint16_t raw = adc_read();
+      return (raw * VREF_V) / ADC_COUNTS;
+    }
+    static inline float volts_to_A(float v_meas, const PhaseCal& c) {
+      // Bipolar con offset ~Vref/2: I = (Vadc - Voffset_adc) / SENS_ADC_VperA
+      return (v_meas - c.offset_V) / c.gain_VperA;
+    }
+    static inline void read_currents_3ph(float& Ia, float& Ib, float& Ic) {
+      float vA = adc_to_V(CAL_A.adc_ch);
+      float vB = adc_to_V(CAL_B.adc_ch);
+      float vC = adc_to_V(CAL_C.adc_ch);
+      Ia = volts_to_A(vA, CAL_A);
+      Ib = volts_to_A(vB, CAL_B);
+      Ic = volts_to_A(vC, CAL_C);
+    }
+
+    // ====== Sensores sin prints (para snapshot desde loop) ======
+    static inline float read_encoder_rad_noprint() {
+      uint16_t raw = encoder_i2c.readAngle(); // 0..4095
+      return (raw * (2.0f * (float)M_PI)) / 4096.0f;
+    }
+    static inline void sample_mpu(float& ax_g, float& ay_g, float& az_g,
+                                  float& gx, float& gy, float& gz) {
+      sensors_event_t a, g, t;
+      mpu.getEvent(&a,&g,&t);
+      const float g0 = 9.80665f;
+      ax_g = a.acceleration.x / g0;
+      ay_g = a.acceleration.y / g0;
+      az_g = a.acceleration.z / g0;
+      gx   = g.gyro.x;
+      gy   = g.gyro.y;
+      gz   = g.gyro.z;
+    }
     static void fillTelemetry(TelemetryFrameV1& f) {
+      SensorSnap s{};
+      uint32_t irq = save_and_disable_interrupts();
+      s = g_snap;
+      restore_interrupts(irq);
 
       f.sof       = TEL_SOF;
       f.version   = PROTO_VERSION;
@@ -103,6 +199,7 @@ namespace DriverSPI {
       f.seq       = g_seq;
       f.t_us      = micros32();
       f.flags     = 0;
+      if (s.overcurrent) f.flags |= FLAG_OC;
       f.sample_hz = 1000;                 // 1 kHz
       f.enc_q15   = rad_to_q15(encoder_5600());
       auto mpu_data = readMPU6050();  // actualizar datos del MPU6050
@@ -117,7 +214,15 @@ namespace DriverSPI {
       f.err_code  = 0;
       f.frame_ctr = (uint16_t)(g_frame_ctr & 0xFFFF);
 
-      for (int i=0;i<5;i++) f.reserved[i] = 0;
+      // ---- Mapear I_peak y phase_peak compactos en reserved ----
+      // reserved[0..1] = I_peak_q15 (A * 1024, signado)
+      int16_t ipeak_q15 = (int16_t)lrintf(s.i_peak * 1024.0f);
+      f.reserved[0] = (uint8_t)(ipeak_q15 & 0xFF);
+      f.reserved[1] = (uint8_t)((ipeak_q15 >> 8) & 0xFF);
+      // reserved[2] = phase_peak (0..2) y bit7=OC activo
+      f.reserved[2] = (uint8_t)((s.overcurrent ? 0x80 : 0x00) | (s.phase_peak & 0x03));
+      f.reserved[3] = 0;
+      f.reserved[4] = 0;
       f.crc8      = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE-1, 0x00);
     }
 
@@ -219,6 +324,12 @@ namespace DriverSPI {
 
       // Registrar callback de GPIO con la firma correcta
       gpio_set_irq_enabled_with_callback(PIN.cs, GPIO_IRQ_EDGE_FALL, true, cs_isr);
+
+      // ADC para corrientes (A/B/C en ADC0/1/2 → GPIO26/27/28)
+      adc_init();
+      adc_gpio_init(26);
+      adc_gpio_init(27);
+      adc_gpio_init(28);
 
       // Buffers iniciales
       TelemetryFrameV1 z{}; fillTelemetry(z);
@@ -352,27 +463,29 @@ float encoder_5600(){
   return ((raw * 2.0f * (float)M_PI) / 4096.0f);
 }
 
-void encoder_init(){
-  if (!encoder_i2c.begin()) {
-    Serial.println("AS5600 no encontrado!");
-    while (1) delay(200);
-  }
-  Serial.println("AS5600 listo.");
-  // SPI.begin();   
-  // encoder_spi.begin(); // CS en pin 5
-}
+
 
 
 
 ///////////////////////
 void setup() {
+
   Serial.begin(115200);
+
   Wire1.setSDA(14);
   Wire1.setSCL(15);
   Wire1.begin();  
   mpu.begin();     
+  encoder_i2c.begin();
+
+  // --- SPI: remapear MISO a GPIO12 para no chocar con LED_PIN=16 ---
+  DriverSPI::setPins({ .sck=18, .mosi=19, .miso=12, .cs=17, .drdy=22 });
   DriverSPI::begin();
 
+  // Auto-zero offsets de ACS712 (sin corriente)
+  DriverSPI::CAL_A.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_A.adc_ch, 256);
+  DriverSPI::CAL_B.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_B.adc_ch, 256);
+  DriverSPI::CAL_C.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_C.adc_ch, 256);
 
   // encoder_i2c.begin();
   // encoder_i2c.setDirection(AS5600_CLOCK_WISE);
@@ -385,10 +498,48 @@ void setup() {
 
 void loop() {
   // dt para rampa
+
   uint32_t now_us = to_us_since_boot(get_absolute_time());
   if (g_last_tick_us == 0) g_last_tick_us = now_us;
   float dt = (now_us - g_last_tick_us) * 1e-6f;
   g_last_tick_us = now_us;
+
+ // --- Sampleo cada ~2 ms (encoder, IMU, corrientes 3φ) ---
+  static uint32_t last_sense_us = 0;
+  if (now_us - last_sense_us >= 2000) {
+    last_sense_us = now_us;
+
+    DriverSPI::SensorSnap s{};
+    s.enc_rad = DriverSPI::read_encoder_rad_noprint();
+
+    // IMU
+    DriverSPI::sample_mpu(s.ax_g, s.ay_g, s.az_g, s.gx_rads, s.gy_rads, s.gz_rads);
+
+    // Corriente 3 fases (ACS712-05B)
+    DriverSPI::read_currents_3ph(s.iA, s.iB, s.iC);
+    float aA = fabsf(s.iA), aB = fabsf(s.iB), aC = fabsf(s.iC);
+    s.i_peak = aA; s.phase_peak = 0;
+    if (aB > s.i_peak) { s.i_peak = aB; s.phase_peak = 1; }
+    if (aC > s.i_peak) { s.i_peak = aC; s.phase_peak = 2; }
+
+    // Latch de sobrecorriente hardware (AJUSTAR UMBRAL)
+    static constexpr float    I_HW_TRIP_A     = 6.5f;  // p. inicial para 05B
+    static constexpr uint32_t HW_TRIP_HOLD_MS = 150;
+    uint32_t now_ms = now_us / 1000u;
+    if (s.i_peak > I_HW_TRIP_A) {
+      DriverSPI::g_oc_hold_until_ms = now_ms + HW_TRIP_HOLD_MS;
+    }
+    s.overcurrent = (now_ms < DriverSPI::g_oc_hold_until_ms);
+    s.t_us = now_us;
+
+    // Publicar snapshot atómico
+    uint32_t irq = save_and_disable_interrupts();
+    DriverSPI::g_snap = s;
+    restore_interrupts(irq);
+  }
+
+  // snapshot de OC
+  bool oc_active = ((to_us_since_boot(get_absolute_time())/1000u) < DriverSPI::g_oc_hold_until_ms);
 
   // snapshot del último comando recibido por SPI
   DriverSPI::ActuationCmdV1 cmd{};
@@ -396,18 +547,24 @@ void loop() {
   uint32_t age_us = 0xFFFFFFFF;
   bool have_cmd = DriverSPI::copyLastCmd(cmd, seq, age_us);
 
-  // failsafe: si el comando no es “fresco”, target = 0
+  // failsafe & target
   float target_motor = 0.0f;
-  if (have_cmd && (age_us/1000u) <= FAILSAFE_MS) {
-    target_motor = compute_motor_vel_from_cmd(cmd); // [rad/s] eje del motor
+  if (!oc_active && have_cmd && (age_us/1000u) <= FAILSAFE_MS) {
+    target_motor = compute_motor_vel_from_cmd(cmd); // [rad/s] eje motor
   }
 
   // rampa
   g_target_vel_motor = apply_slew(target_motor, g_target_vel_motor, dt);
 
-  // SimpleFOC open-loop
-  motor.loopFOC();
-  motor.move(g_target_vel_motor);
+  // HARD-STOP por OC
+  if (oc_active) {
+    motor.move(0.0f);
+    digitalWrite(EN1, LOW); digitalWrite(EN2, LOW); digitalWrite(EN3, LOW);
+  } else {
+    digitalWrite(EN1, HIGH); digitalWrite(EN2, HIGH); digitalWrite(EN3, HIGH);
+    motor.loopFOC();
+    motor.move(g_target_vel_motor);
+  }
 
   // LED feedback proporcional a |vel|
   pixels.setPixelColor(0, pixels.Color(
@@ -416,6 +573,5 @@ void loop() {
       0));
   pixels.show();
 
-  // si querés, bajá el jitter de loop
   delay(1);
 }
