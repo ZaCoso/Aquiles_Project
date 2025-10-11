@@ -118,13 +118,6 @@ namespace DriverSPI {
     static inline int16_t g_to_q14(float g)     { return (int16_t)(g * 16384.0f); }
     static inline int16_t gyro_to_q15(float rad_per_s, float max_rad_per_s) { return (int16_t)((rad_per_s / max_rad_per_s) * 32768.0f); }
     // ===================== Sensores (stub de ejemplo) =====================
-
-    static inline uint32_t micros32() { return (uint32_t) to_us_since_boot(get_absolute_time()); }
-    static inline int16_t rad_to_q15(float rad) { return  (int16_t)((rad / (2.0f * (float)M_PI)) * 32768.0f);}
-    static inline int16_t g_to_q14(float g)     { return (int16_t)(g * 16384.0f); }
-    static inline int16_t gyro_to_q15(float rad_per_s, float max_rad_per_s) { return (int16_t)((rad_per_s / max_rad_per_s) * 32768.0f); }
-    static inline int16_t amps_to_q15(float a){ return (int16_t)lrintf(a * 1024.0f); }
-
     // ====== Calibración Corriente ACS712-05B ======
     static constexpr float VREF_V      = 3.3f;       // tensión que ve el ADC (tras divisor)
     static constexpr float ADC_COUNTS  = 4095.0f;
@@ -190,7 +183,7 @@ namespace DriverSPI {
     static void fillTelemetry(TelemetryFrameV1& f) {
       SensorSnap s{};
       uint32_t irq = save_and_disable_interrupts();
-      s = g_snap;
+ 
       restore_interrupts(irq);
 
       f.sof       = TEL_SOF;
@@ -534,7 +527,7 @@ void loop() {
 
     // Publicar snapshot atómico
     uint32_t irq = save_and_disable_interrupts();
-    DriverSPI::g_snap = s;
+    memcpy((void*)&DriverSPI::g_snap, &s, sizeof(DriverSPI::SensorSnap)); 
     restore_interrupts(irq);
   }
 
