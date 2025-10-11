@@ -1,19 +1,26 @@
 #include "AppTasks.h"
-// put function declarations here:
+using namespace Aquiles;
 
 void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(115200);
-  delay(1000);
+    Serial.begin(115200);
+    delay(1000);
+    Serial.println("Iniciando...");
 
-  Serial.println("Iniciando...");
+    xTaskCreate(Tasks::Init,  "Init",   tskINIT_STACK,  nullptr, tskINIT_PRIORITY,  nullptr);
+    xTaskCreate(Tasks::Blink, "Blinky", tskBLINK_STACK, nullptr, tskBLINK_PRIORITY, nullptr);
 
-  xTaskCreate(InitTask, "Init", tskINIT_STACK, NULL, tskINIT_PRIORITY, NULL);
-  xTaskCreate(BlinkTask, "Blinky",tskBLINK_STACK, NULL, tskBLINK_PRIORITY, NULL);
-  initBLE();
-  // xTaskCreate(vSpiTxTask, "SPI Tx", tskSPI_TX_STACK, NULL, tskSPI_TX_PRIORITY, NULL);
+    BLE::init();
+
+    Aquiles::Detection::GlobalCfg cfg;      // defaults OK
+    cfg.intent.omega_min  = 1.0f;
+    cfg.intent.acc_min_g  = 0.30f;
+    cfg.limits.I_max      = 6.0f;
+    cfg.slew_per_tick     = 0.08f;         // rampa
+    Aquiles::Detection::begin(cfg);
+    Aquiles::SPIBus::init();
+    Aquiles::SPIBus::startTickTask();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }
