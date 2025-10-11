@@ -46,7 +46,12 @@ namespace Aquiles {
         uint32_t ts_us       = 0;      // timestamp; si 0 => micros()
         bool     imu_sat     = false;  // saturación IMU
         };
-
+        // --- Control proporcional de ángulo → velocidad articular ---
+        struct AngleCtrlCfg {
+        float kp_vel        = 3.0f;   // [rad/s] por [rad]
+        float vmax_joint    = 1.5f;   // [rad/s] saturación de v articular
+        float deadband_rad  = 0.02f;  // [rad] zona muerta en error angular
+};
         // Señales derivadas/fusionadas (por pierna)
         struct LegSignals {
         float    theta   = 0.0f;     // rad
@@ -64,17 +69,16 @@ namespace Aquiles {
 
         struct CmdOut {
         float setpoint = 0.0f;   // lo que mandarías al driver
-        Mode  mode     = Mode::TORQUE;
+        Mode  mode     = Mode::VELOCITY;
         };
 
         // ---------------- Configuración ----------------
         struct LimitsCfg {
-        float I_max   = 6.0f;     // para modo torque
-        float vel_max = 25.0f;    // rad/s
-        float pos_min = -3.14f;   // rad
-        float pos_max =  3.14f;   // rad
+        float vel_max = 25.0f;   // rad/s (motor o articular según dónde lo apliques)
+        float pos_min = -0.5f;   // rad
+        float pos_max =  1.6f;   // rad
+        float I_max   =  6.0f;   // (dejalo por si volvés a torque)
         };
-
         struct IntentCfg {
         uint16_t t_win_ms   = 100;                          // ventana detección
         uint16_t t_hold_ms  = 50;                           // persistencia
@@ -92,9 +96,14 @@ namespace Aquiles {
         struct GlobalCfg {
         LimitsCfg limits;
         IntentCfg intent;
+        AngleCtrlCfg angle;
+        float gear_total;
         TimingCfg timing;
-        float     slew_per_tick = 0.10f;    // rampa por ciclo del planner
+        float     slew_per_tick = 0.10f;
+      // rampa por ciclo del planner
         };
+        void setAngleTarget(Leg leg, float theta_ref_rad);
+        float getAngleTarget(Leg leg);
 
         // --------------- API pública -------------------
         // Inicializa la lógica (crea tareas internas). No usa SPI.

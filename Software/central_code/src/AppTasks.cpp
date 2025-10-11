@@ -20,11 +20,27 @@ namespace Aquiles {
       // ========= Helpers =========
       static inline uint32_t micros32(){ return (uint32_t)micros(); }
       static inline float unwrap(float th, float th_prev){
+        
         float d = th - th_prev;
         while(d >  (float)M_PI) d -= 2.f*(float)M_PI;
         while(d < -(float)M_PI) d += 2.f*(float)M_PI;
         return th_prev + d;
       }
+
+      static float theta_ref_L = 0.0f;
+      static float theta_ref_R = 0.0f;
+
+      void setAngleTarget(Leg leg, float theta_ref_rad) {
+        if (leg == Leg::L) theta_ref_L = theta_ref_rad;
+        else               theta_ref_R = theta_ref_rad;
+      }
+
+
+      float getAngleTarget(Leg leg){
+        return (leg == Leg::L) ? theta_ref_L : theta_ref_R;
+      }
+
+       // namespaces
       static inline float slew(float target, float current, float max_delta){
         float d = target - current;
         if(d >  max_delta) d =  max_delta;
@@ -54,31 +70,32 @@ namespace Aquiles {
         out.phase  = out.enable ? Phase::SWING : Phase::STANCE;
         return out;
       }
-
-      static CmdOut planner(const IntentOut& I,
-                            const LegSignals& s,
-                            const LimitsCfg& lims,
-                            float slew_per_tick,
-                            float& sp_accum /*estado del smoother*/)
+      static CmdOut planner_angleP(const IntentOut& I,
+                                  const LegSignals& s,
+                                  const LimitsCfg& lims,
+                                  const GlobalCfg& C,
+                                  float& sp_accum /*estado del smoother*/)
       {
-        // Objetivo “ideal”
-        float sp_target = 0.0f;
-        Mode  mode      = Mode::TORQUE;
+        float theta_ref = (&s==&SIG_L) ? theta_ref_L : theta_ref_R;  // truco si lo dejás así
+        float err = theta_ref - s.theta;
 
-        if (I.enable && I.phase==Phase::SWING){
-          // Ejemplo: torque proporcional a ω (ajustá la ganancia 0.5f)
-          sp_target = clamp(0.5f * s.omega, -lims.I_max, lims.I_max);
-        }
+        // Ventana articular: si estás fuera, clamp al borde (protección suave)
+        if (s.theta < lims.pos_min)    err = lims.pos_min - s.theta;
+        if (s.theta > lims.pos_max)    err = lims.pos_max - s.theta;
 
-        // Ventana articular básica
-        if (s.theta < lims.pos_min || s.theta > lims.pos_max) sp_target = 0.0f;
+        // Deadband para evitar caza
+        if (fabsf(err) < C.angle.deadband_rad) err = 0.0f;
 
-        // Suavizado (slew)
-        sp_accum = slew(sp_target, sp_accum, slew_per_tick);
+        // P puro: velocidad articular deseada
+        float v_joint = C.angle.kp_vel * err;
+        v_joint = clamp(v_joint, -C.angle.vmax_joint, C.angle.vmax_joint);
+
+        // Suavizado (slew) de la velocidad articular
+        sp_accum = slew(v_joint, sp_accum, C.slew_per_tick);  // sp_accum ahora es v_joint_suavizada
 
         CmdOut out;
-        out.mode     = mode;
-        out.setpoint = sp_accum;
+        out.mode     = Mode::VELOCITY;     // <--- importante: modo VELOCIDAD
+        out.setpoint = sp_accum;           // <-- [rad/s] ARTICULAR
         return out;
       }
 
@@ -140,9 +157,8 @@ namespace Aquiles {
           IntentOut IR = detectIntent(SIG_R, SIG_L, CFG.intent, contra_hint_R);
 
           // Planner por pierna
-          CMD_L = planner(IL, SIG_L, CFG.limits, CFG.slew_per_tick, sp_cur_L);
-          CMD_R = planner(IR, SIG_R, CFG.limits, CFG.slew_per_tick, sp_cur_R);
-
+          CMD_L = planner_angleP(IL, SIG_L, CFG.limits, CFG, sp_cur_L);
+          CMD_R = planner_angleP(IR, SIG_R, CFG.limits, CFG, sp_cur_R);
           vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.planner_period_ms));
         }
       }
@@ -369,14 +385,19 @@ namespace Aquiles {
           uint8_t calc = crc8_sum(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE - 1);
           return (calc == f.crc8);
         }
+        inline int16_t vel_to_q15(float vel_rad_s) { return (int16_t)lrintf(vel_rad_s * 2048.0f); }
+        inline float   q15_to_vel(int16_t q)       { return (float)q / 2048.0f; }
 
-        static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float setpoint_amps) {
+        // 2) Constructor del comando ACTUALIZADO: ahora manda VELOCIDAD
+        static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s) {
           memset(&c, 0, sizeof(c));
           c.sof = ACT_SOF;  c.version = PROTO_VERSION;  c.len = ACT_SIZE - 1;
-          c.seq = seq;      c.mode = 1; // torque
-          c.tgt_q15 = amps_to_q15(setpoint_amps);
+          c.seq = seq;
+          c.mode = 2; // VELOCITY  (antes era 1 para torque)
+          c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s); // setpoint = rad/s ARTICULAR
           c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1);
         }
+
 
         static void ingestTelemetry(const TelemetryFrameV1& f, Leg leg) {
           Detection::SampleIn s{};

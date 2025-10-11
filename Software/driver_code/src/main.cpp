@@ -241,7 +241,9 @@ void initSimpleFOC() {
 
 
   motor.controller = MotionControlType::velocity_openloop;
-  
+  motor.voltage_limit  = 3.0f;      // subí según tu hardware
+  motor.velocity_limit = 200.0f;    // tope mecánico del motor [rad/s] (seguro)
+
   // Inicializar motor y FOC
   motor.init();
   motor.initFOC();
