@@ -32,7 +32,48 @@ BLDCDriver3PWM driver = BLDCDriver3PWM(1, 5, 3); // Pines PWM para el driver
 
 float encoder_5600();   // devuelve ángulo del AS5600 en radianes (0..2π)
 std::vector<float> readMPU6050();  
+// ====== Open-loop: escalas y seguridad ======
+static constexpr float   GEAR_RATIO              = 52.0f;     // 1:52
+static constexpr float   MAX_VEL_RAD_S_MOTOR     = 100.0f;    // límite [rad/s] eje motor
+static constexpr float   RAMP_RAD_S2             = 800.0f;    // rampa [rad/s^2]
+static constexpr float   DEADBAND_RAD_S          = 0.5f;      // zona muerta cerca de 0
+static constexpr uint32_t FAILSAFE_MS            = 50;        // si no hay cmd fresco → 0
+// true: el ESP32 manda vel de SALIDA (post-reductora). false: manda vel de MOTOR.
+static constexpr bool    COMMAND_IS_OUTPUT_SIDE  = true;
 
+// Estado para rampa y dt
+static float     g_target_vel_motor = 0.0f;   // [rad/s] objetivo suave
+static uint32_t  g_last_tick_us     = 0;
+
+static inline float q15_to_unit(int16_t q15) { return (float)q15 / 32768.0f; }
+static float clampf(float v, float lo, float hi){ return (v<lo)?lo:((v>hi)?hi:v); }
+
+// Convierte el comando SPI a velocidad del EJE DEL MOTOR [rad/s]
+static float compute_motor_vel_from_cmd(const DriverSPI::ActuationCmdV1& cmd) {
+  float unit = q15_to_unit(cmd.tgt_q15); // -1..+1
+  float vel_motor = 0.0f;
+
+  if (COMMAND_IS_OUTPUT_SIDE) {
+    // El master piensa en la salida: su máximo práctico es MAX_VEL/GEAR
+    float vel_out = unit * (MAX_VEL_RAD_S_MOTOR / GEAR_RATIO);
+    vel_motor = vel_out * GEAR_RATIO; // paso a motor
+  } else {
+    // El master ya manda velocidad de motor normalizada
+    vel_motor = unit * MAX_VEL_RAD_S_MOTOR;
+  }
+
+  if (fabsf(vel_motor) < DEADBAND_RAD_S) vel_motor = 0.0f;
+  return clampf(vel_motor, -MAX_VEL_RAD_S_MOTOR, +MAX_VEL_RAD_S_MOTOR);
+}
+
+// Rampa (slew-rate) en rad/s^2 para evitar tirones
+static float apply_slew(float target, float current, float dt_s) {
+  float max_step = RAMP_RAD_S2 * dt_s;
+  float delta = target - current;
+  if (delta >  max_step) delta =  max_step;
+  if (delta < -max_step) delta = -max_step;
+  return current + delta;
+}
 namespace DriverSPI {
 
     // ===================== Config y protocolo =====================
@@ -154,6 +195,7 @@ namespace DriverSPI {
       if (ok) {
         // g_last_cmd es volatile → usar memcpy para evitar el warning
         memcpy((void*)&g_last_cmd, &cmd, sizeof(ActuationCmdV1));
+        g_last_cmd_us = micros32();
       }
 
       // 2) Snapshot del último frame “cerrado” (volatile → local)
@@ -179,7 +221,19 @@ namespace DriverSPI {
         serve_transaction();
       }
     }
+    static volatile uint32_t g_last_cmd_us = 0; // marca de tiempo del último comando válido
 
+    inline bool copyLastCmd(ActuationCmdV1& out, uint8_t& seq_out, uint32_t& age_us_out) {
+      uint32_t irq = save_and_disable_interrupts();
+      ActuationCmdV1 tmp = g_last_cmd;
+      uint8_t  sq  = g_seq;
+      uint32_t age = micros32() - g_last_cmd_us;
+      restore_interrupts(irq);
+      out = tmp; seq_out = sq; age_us_out = age;
+
+      bool ok = (out.sof==ACT_SOF && out.version==PROTO_VERSION && out.len==(ACT_SIZE-1));
+      return ok;
+    }
     // ===================== API mínimas =====================
     static bool g_inited = false;
 
@@ -232,7 +286,12 @@ namespace DriverSPI {
 // --- Función para inicializar SimpleFOC ---
 void initSimpleFOC() {
   // Inicializar sensor
-  
+  pinMode(EN1, OUTPUT);
+  pinMode(EN2, OUTPUT);
+  pinMode(EN3, OUTPUT);
+  digitalWrite(EN1, HIGH);
+  digitalWrite(EN2, HIGH);
+  digitalWrite(EN3, HIGH);
   // Configurar driver
   driver.voltage_power_supply = 5;   // Voltaje de alimentación del driver
   driver.init();
@@ -242,7 +301,7 @@ void initSimpleFOC() {
 
   motor.controller = MotionControlType::velocity_openloop;
   motor.voltage_limit  = 3.0f;      // subí según tu hardware
-  motor.velocity_limit = 200.0f;    // tope mecánico del motor [rad/s] (seguro)
+  motor.velocity_limit = MAX_VEL_RAD_S_MOTOR;    // tope mecánico del motor [rad/s] (seguro)
 
   // Inicializar motor y FOC
   motor.init();
@@ -325,14 +384,38 @@ void setup() {
 }
 
 void loop() {
-  motor.loopFOC();
-  MotorVelMove(1);
-  // encoder_5600();
+  // dt para rampa
+  uint32_t now_us = to_us_since_boot(get_absolute_time());
+  if (g_last_tick_us == 0) g_last_tick_us = now_us;
+  float dt = (now_us - g_last_tick_us) * 1e-6f;
+  g_last_tick_us = now_us;
 
-  pixels.setPixelColor(0, pixels.Color(0, 0, 255));
+  // snapshot del último comando recibido por SPI
+  DriverSPI::ActuationCmdV1 cmd{};
+  uint8_t  seq   = 0;
+  uint32_t age_us = 0xFFFFFFFF;
+  bool have_cmd = DriverSPI::copyLastCmd(cmd, seq, age_us);
+
+  // failsafe: si el comando no es “fresco”, target = 0
+  float target_motor = 0.0f;
+  if (have_cmd && (age_us/1000u) <= FAILSAFE_MS) {
+    target_motor = compute_motor_vel_from_cmd(cmd); // [rad/s] eje del motor
+  }
+
+  // rampa
+  g_target_vel_motor = apply_slew(target_motor, g_target_vel_motor, dt);
+
+  // SimpleFOC open-loop
+  motor.loopFOC();
+  motor.move(g_target_vel_motor);
+
+  // LED feedback proporcional a |vel|
+  pixels.setPixelColor(0, pixels.Color(
+      0,
+      (uint8_t)map((long)fabs(g_target_vel_motor), 0, (long)MAX_VEL_RAD_S_MOTOR, 0, 200),
+      0));
   pixels.show();
-  delay(100);
-  pixels.clear();
-  pixels.show();
-  delay(100);
+
+  // si querés, bajá el jitter de loop
+  delay(1);
 }
