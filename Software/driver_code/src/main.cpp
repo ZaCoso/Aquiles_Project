@@ -249,11 +249,6 @@ void initSimpleFOC() {
   Serial.println("Motor con FOC inicializado!");
 }
 
-// --- Función para mover el motor a un ángulo específico ---
-void MotorAngMove(float angulo_rad) {
-  motor.loopFOC();        
-  motor.move(angulo_rad); 
-}
 
 // --- Función para mover el motor en velocidad ---
 void MotorVelMove(float vel) {
@@ -331,7 +326,7 @@ void loop() {
   motor.loopFOC();
   MotorVelMove(1);
   // encoder_5600();
-  Serial.print("dsd");
+
   pixels.setPixelColor(0, pixels.Color(0, 0, 255));
   pixels.show();
   delay(100);
