@@ -13,14 +13,14 @@
 #include "hardware/sync.h"
 #include "hardware/timer.h"
 
-
+#define EN1 0
+#define EN2 4
+#define EN3 2  
 #define LED_PIN   16    // RP2040 Zero (Waveshare) suele ser 16
 #define LED_COUNT 1
 
 // ---- Declaración GLOBAL (fuera de cualquier función) ----
 Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
-
-
 
 AS5600 encoder_i2c;    
 
@@ -32,50 +32,9 @@ BLDCDriver3PWM driver = BLDCDriver3PWM(1, 5, 3); // Pines PWM para el driver
 
 float encoder_5600();   // devuelve ángulo del AS5600 en radianes (0..2π)
 std::vector<float> readMPU6050();  
-// ====== Open-loop: escalas y seguridad ======
-static constexpr float   GEAR_RATIO              = 52.0f;     // 1:52
-static constexpr float   MAX_VEL_RAD_S_MOTOR     = 100.0f;    // límite [rad/s] eje motor
-static constexpr float   RAMP_RAD_S2             = 800.0f;    // rampa [rad/s^2]
-static constexpr float   DEADBAND_RAD_S          = 0.5f;      // zona muerta cerca de 0
-static constexpr uint32_t FAILSAFE_MS            = 50;        // si no hay cmd fresco → 0
-// true: el ESP32 manda vel de SALIDA (post-reductora). false: manda vel de MOTOR.
-static constexpr bool    COMMAND_IS_OUTPUT_SIDE  = true;
 
-// Estado para rampa y dt
-static float     g_target_vel_motor = 0.0f;   // [rad/s] objetivo suave
-static uint32_t  g_last_tick_us     = 0;
-
-static inline float q15_to_unit(int16_t q15) { return (float)q15 / 32768.0f; }
-static float clampf(float v, float lo, float hi){ return (v<lo)?lo:((v>hi)?hi:v); }
-
-// Convierte el comando SPI a velocidad del EJE DEL MOTOR [rad/s]
-static float compute_motor_vel_from_cmd(const DriverSPI::ActuationCmdV1& cmd) {
-  float unit = q15_to_unit(cmd.tgt_q15); // -1..+1
-  float vel_motor = 0.0f;
-
-  if (COMMAND_IS_OUTPUT_SIDE) {
-    // El master piensa en la salida: su máximo práctico es MAX_VEL/GEAR
-    float vel_out = unit * (MAX_VEL_RAD_S_MOTOR / GEAR_RATIO);
-    vel_motor = vel_out * GEAR_RATIO; // paso a motor
-  } else {
-    // El master ya manda velocidad de motor normalizada
-    vel_motor = unit * MAX_VEL_RAD_S_MOTOR;
-  }
-
-  if (fabsf(vel_motor) < DEADBAND_RAD_S) vel_motor = 0.0f;
-  return clampf(vel_motor, -MAX_VEL_RAD_S_MOTOR, +MAX_VEL_RAD_S_MOTOR);
-}
-
-// Rampa (slew-rate) en rad/s^2 para evitar tirones
-static float apply_slew(float target, float current, float dt_s) {
-  float max_step = RAMP_RAD_S2 * dt_s;
-  float delta = target - current;
-  if (delta >  max_step) delta =  max_step;
-  if (delta < -max_step) delta = -max_step;
-  return current + delta;
-}
 namespace DriverSPI {
-
+    static volatile uint32_t g_last_cmd_us = 0;
     // ===================== Config y protocolo =====================
     struct Pins {
       uint8_t sck  = 18;   // SPI0 SCK
@@ -221,11 +180,10 @@ namespace DriverSPI {
         serve_transaction();
       }
     }
-    static volatile uint32_t g_last_cmd_us = 0; // marca de tiempo del último comando válido
-
     inline bool copyLastCmd(ActuationCmdV1& out, uint8_t& seq_out, uint32_t& age_us_out) {
       uint32_t irq = save_and_disable_interrupts();
-      ActuationCmdV1 tmp = g_last_cmd;
+      ActuationCmdV1 tmp;
+      memcpy(&tmp, (const void*)&g_last_cmd, sizeof(ActuationCmdV1));
       uint8_t  sq  = g_seq;
       uint32_t age = micros32() - g_last_cmd_us;
       restore_interrupts(irq);
@@ -284,6 +242,48 @@ namespace DriverSPI {
 
 } // namespace DriverSPI
 // --- Función para inicializar SimpleFOC ---
+// ====== Open-loop: escalas y seguridad ======
+static constexpr float   GEAR_RATIO              = 52.0f;     // 1:52
+static constexpr float   MAX_VEL_RAD_S_MOTOR     = 100.0f;    // límite [rad/s] eje motor
+static constexpr float   RAMP_RAD_S2             = 800.0f;    // rampa [rad/s^2]
+static constexpr float   DEADBAND_RAD_S          = 0.5f;      // zona muerta cerca de 0
+static constexpr uint32_t FAILSAFE_MS            = 50;        // si no hay cmd fresco → 0
+// true: el ESP32 manda vel de SALIDA (post-reductora). false: manda vel de MOTOR.
+static constexpr bool    COMMAND_IS_OUTPUT_SIDE  = true;
+
+// Estado para rampa y dt
+static float     g_target_vel_motor = 0.0f;   // [rad/s] objetivo suave
+static uint32_t  g_last_tick_us     = 0;
+
+static inline float q15_to_unit(int16_t q15) { return (float)q15 / 32768.0f; }
+static float clampf(float v, float lo, float hi){ return (v<lo)?lo:((v>hi)?hi:v); }
+
+// Convierte el comando SPI a velocidad del EJE DEL MOTOR [rad/s]
+static float compute_motor_vel_from_cmd(const DriverSPI::ActuationCmdV1& cmd) {
+  float unit = q15_to_unit(cmd.tgt_q15); // -1..+1
+  float vel_motor = 0.0f;
+
+  if (COMMAND_IS_OUTPUT_SIDE) {
+    // El master piensa en la salida: su máximo práctico es MAX_VEL/GEAR
+    float vel_out = unit * (MAX_VEL_RAD_S_MOTOR / GEAR_RATIO);
+    vel_motor = vel_out * GEAR_RATIO; // paso a motor
+  } else {
+    // El master ya manda velocidad de motor normalizada
+    vel_motor = unit * MAX_VEL_RAD_S_MOTOR;
+  }
+
+  if (fabsf(vel_motor) < DEADBAND_RAD_S) vel_motor = 0.0f;
+  return clampf(vel_motor, -MAX_VEL_RAD_S_MOTOR, +MAX_VEL_RAD_S_MOTOR);
+}
+
+// Rampa (slew-rate) en rad/s^2 para evitar tirones
+static float apply_slew(float target, float current, float dt_s) {
+  float max_step = RAMP_RAD_S2 * dt_s;
+  float delta = target - current;
+  if (delta >  max_step) delta =  max_step;
+  if (delta < -max_step) delta = -max_step;
+  return current + delta;
+}
 void initSimpleFOC() {
   // Inicializar sensor
   pinMode(EN1, OUTPUT);
