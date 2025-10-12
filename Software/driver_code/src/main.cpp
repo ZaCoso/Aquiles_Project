@@ -86,6 +86,7 @@ namespace DriverSPI {
     static volatile uint8_t  g_idx_wr = 0;
     static volatile uint8_t  g_idx_rd = 1;
     static volatile uint32_t g_frame_ctr = 0;
+    static volatile bool g_xfer_pending = false;
     static volatile uint8_t  g_seq       = 0;
     static volatile bool     g_started   = false;
     static volatile ActuationCmdV1 g_last_cmd{};
@@ -242,24 +243,32 @@ namespace DriverSPI {
       return true;
     }
 
+    // Forward decls (helpers implemented below)
+    static inline bool rx_byte_timeout(uint8_t& b, uint32_t timeout_us);
+    static inline bool tx_byte_timeout(uint8_t b, uint32_t timeout_us);
+
     // ===================== Transacción SPI: RX 16B + TX 36B =====================
-    static void serve_transaction() {
-      // 1) Recibir comando (16B)
-      ActuationCmdV1 cmd{}; 
-      for (int i=0;i<(int)ACT_SIZE;i++) {
-        uint8_t b; spi_read_blocking(spi1, 0x00, &b, 1);
+    static bool serve_transaction_safe(uint32_t timeout_us_per_byte = 200) {
+      if (gpio_get(PIN.cs)) return false;                   // CS alto → nada que hacer
+
+      // 1) RX comando 16B con timeout
+      ActuationCmdV1 cmd{};
+      for (int i=0; i<(int)ACT_SIZE; ++i) {
+        uint8_t b;
+        if (!rx_byte_timeout(b, timeout_us_per_byte)) return false;  // aborta limpio
         reinterpret_cast<uint8_t*>(&cmd)[i] = b;
       }
+
+      // Validación
       bool ok = (cmd.sof==ACT_SOF && cmd.version==PROTO_VERSION && cmd.len==(ACT_SIZE-1));
       uint8_t ccrc = crc8_0x07(reinterpret_cast<const uint8_t*>(&cmd), ACT_SIZE-1, 0x00);
       ok = ok && (ccrc == cmd.crc8);
       if (ok) {
-        // g_last_cmd es volatile → usar memcpy para evitar el warning
         memcpy((void*)&g_last_cmd, &cmd, sizeof(ActuationCmdV1));
         g_last_cmd_us = micros32();
       }
 
-      // 2) Snapshot del último frame “cerrado” (volatile → local)
+      // 2) Snapshot del último frame
       TelemetryFrameV1 snap{};
       {
         uint32_t irq = save_and_disable_interrupts();
@@ -267,11 +276,32 @@ namespace DriverSPI {
         restore_interrupts(irq);
       }
 
-      // 3) Transmitir (36B)
-      for (int i=0;i<(int)TEL_SIZE;i++) {
+      // 3) TX 36B con timeout
+      for (int i=0; i<(int)TEL_SIZE; ++i) {
         uint8_t b = reinterpret_cast<uint8_t*>(&snap)[i];
-        spi_write_blocking(spi1, &b, 1);
+        if (!tx_byte_timeout(b, timeout_us_per_byte)) return false;
       }
+
+      return true;
+    }
+    static inline bool rx_byte_timeout(uint8_t& b, uint32_t timeout_us){
+      uint32_t t0 = micros32();
+      while (!spi_is_readable(spi1)) {
+        if (gpio_get(PIN.cs)) return false;                 // CS subió → abortar
+        if ((micros32() - t0) > timeout_us) return false;   // sin reloj → abortar
+      }
+      b = (uint8_t)spi_get_hw(spi1)->dr;                    // leer un byte de RX FIFO
+      return true;
+    }
+
+    static inline bool tx_byte_timeout(uint8_t b, uint32_t timeout_us){
+      uint32_t t0 = micros32();
+      while (!spi_is_writable(spi1)) {
+        if (gpio_get(PIN.cs)) return false;
+        if ((micros32() - t0) > timeout_us) return false;
+      }
+      spi_get_hw(spi1)->dr = b;                             // poner un byte en TX FIFO
+      return true;
     }
 
     // ===================== IRQ por CS (flanco ↓ = 1 transacción) =================
@@ -279,7 +309,7 @@ namespace DriverSPI {
     static void cs_isr(uint gpio, uint32_t events) {
       (void)events;
       if (gpio == PIN.cs && !gpio_get(PIN.cs)) {
-        serve_transaction();
+        g_xfer_pending = true;  
       }
     }
     inline bool copyLastCmd(ActuationCmdV1& out, uint8_t& seq_out, uint32_t& age_us_out) {
@@ -335,7 +365,7 @@ namespace DriverSPI {
       // Timer 1 kHz
       add_repeating_timer_us(-1000, timer_cb, nullptr, &g_tim);
 
-      Serial.println("[DriverSPI] listo (SPI0 slave, 1 kHz).");
+      Serial.println("[DriverSPI] listo (SPI1 slave, 1 kHz).");
     }
 
     void end() {
@@ -350,7 +380,7 @@ namespace DriverSPI {
 } // namespace DriverSPI
 // --- Función para inicializar SimpleFOC ---
 // ====== Open-loop: escalas y seguridad ======
-static constexpr float   GEAR_RATIO              = 52.0f;     // 1:52
+static constexpr float   GEAR_RATIO              = 51.0f;     // 1:51
 static constexpr float   MAX_VEL_RAD_S_MOTOR     = 100.0f;    // límite [rad/s] eje motor
 static constexpr float   RAMP_RAD_S2             = 800.0f;    // rampa [rad/s^2]
 static constexpr float   DEADBAND_RAD_S          = 0.5f;      // zona muerta cerca de 0
@@ -483,7 +513,7 @@ void setup() {
   DriverSPI::CAL_B.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_B.adc_ch, 256);
   DriverSPI::CAL_C.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_C.adc_ch, 256);
   
-  initSimpleFOC();
+  // initSimpleFOC();
   pixels.begin();
   pixels.clear();
   pixels.show();
@@ -493,12 +523,19 @@ void setup() {
 
 void loop() {
   // dt para rampa
-
+  Serial.println("B");
   uint32_t now_us = to_us_since_boot(get_absolute_time());
   if (g_last_tick_us == 0) g_last_tick_us = now_us;
   float dt = (now_us - g_last_tick_us) * 1e-6f;
   g_last_tick_us = now_us;
-
+  // Despachar transacción SPI desde main loop (no en ISR)
+  if (DriverSPI::g_xfer_pending) {
+    // Solo si CS sigue LOW intentamos transferir
+    if (!gpio_get(DriverSPI::PIN.cs)) {
+      DriverSPI::serve_transaction_safe(200);  // 200 us/byte; ajustable
+    }
+    DriverSPI::g_xfer_pending = false;         // limpiar flag SIEMPRE
+  }
 //  --- Sampleo cada ~2 ms (encoder, IMU, corrientes 3φ) ---
   static uint32_t last_sense_us = 0;
   if (now_us - last_sense_us >= 2000) {
@@ -562,7 +599,7 @@ void loop() {
   }
 
   // LED feedback proporcional a |vel|
-  pixels.setPixelColor(0, pixels.Color(0, 255, 0)); // Verde máximo
+  pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Verde máximo
   pixels.show();
   delay(1);
 }
