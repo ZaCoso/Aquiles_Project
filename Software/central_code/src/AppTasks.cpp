@@ -331,7 +331,7 @@ namespace Aquiles {
           return (uint32_t)(esp_timer_get_time() / 1000ULL);
         }
         // =================== CONFIG ===================
-        static SPISettings RP2040_SETTINGS(8000000, MSBFIRST, SPI_MODE0);
+        static SPISettings RP2040_SETTINGS(1000000, MSBFIRST, SPI_MODE0);
 
         static SemaphoreHandle_t spiMutex = nullptr;
         static inline void lock()   { xSemaphoreTake(spiMutex, portMAX_DELAY); }
@@ -386,7 +386,7 @@ namespace Aquiles {
           return crc;
         }
 
-        float q15_to_rad(int16_t q)   { return (float)q * (float)M_PI / 32768.0f; }
+        float q15_to_rad(int16_t q)   { return (float)q * 2.0f * (float)M_PI / 32768.0f; }
         float q14_to_g(int16_t q)     { return (float)q / 16384.0f; }
         int16_t amps_to_q15(float a)  { return (int16_t)lrintf(a * 1024.0f); }
 
@@ -483,9 +483,15 @@ namespace Aquiles {
             TelemetryFrameV1 fL{}, fR{};
             bool okL = xfer_one(CS_L, cL, fL);
             if (okL) ingestTelemetry(fL, Leg::L);
+            else {
+              Serial.println("[SPI][L] telemetry CRC/format FAIL");
+            }
 
             bool okR = xfer_one(CS_R, cR, fR);
             if (okR) ingestTelemetry(fR, Leg::R);
+            else {
+              Serial.println("[SPI][R] telemetry CRC/format FAIL");
+            }
 
             vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
           }
