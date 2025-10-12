@@ -125,7 +125,8 @@ namespace Aquiles {
         void setContraStanceHint(Leg leg_in_swing, bool contralateral_is_in_stance);
 
     } // namespace Detection
-    namespace BLE {
+    namespace 
+    BLE {
         extern NimBLECharacteristic* pCharacteristic;
         extern volatile bool deviceConnected;
         extern std::string lastValue;

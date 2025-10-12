@@ -1,6 +1,5 @@
 #include <Wire.h>
-// #include <MPU6050_light.h>
-#include <AS5600.h>
+
 
 #define SDA_PIN 14
 #define SCL_PIN 15

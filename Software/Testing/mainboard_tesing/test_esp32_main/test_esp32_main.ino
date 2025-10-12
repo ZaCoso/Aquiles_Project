@@ -19,8 +19,6 @@ void setup() {
   Serial.begin(115200);
   pinMode(BUZZER_PIN, OUTPUT);
 
-  // Inicializa el WiFi en modo Access Point
-  WiFi.softAP(ssid, password);
 
   Serial.println("Red WiFi inicializada.");
   Serial.print("Nombre (SSID): ");

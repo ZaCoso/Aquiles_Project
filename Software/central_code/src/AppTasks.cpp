@@ -302,13 +302,13 @@ namespace Aquiles {
     // ================= TAREAS BÁSICAS =================
     namespace Tasks {
         void Init(void* /*params*/) {
-            pinMode(46, OUTPUT);
+            pinMode(9, OUTPUT);
             vTaskDelete(nullptr);
         }
 
         void Blink(void* /*params*/) {
             for (;;) {
-                digitalWrite(46, !digitalRead(46));
+                digitalWrite(9, !digitalRead(9));
                 Serial.printf("Rk.Test1\r\n");
                 vTaskDelay(pdMS_TO_TICKS(500));
             }
@@ -339,11 +339,11 @@ namespace Aquiles {
         static inline uint8_t xfer(uint8_t b) { return SPI.transfer(b); }
 
         // Pines (ajustá según tu hardware)
-        static constexpr int CS_L = 5;    // CS pierna izquierda
-        static constexpr int CS_R = 17;   // CS pierna derecha
-        static constexpr int PIN_SCK  = 18;
-        static constexpr int PIN_MISO = 19;
-        static constexpr int PIN_MOSI = 23;
+        static constexpr int CS_L = 38;    // CS pierna izquierda
+        static constexpr int CS_R = 39;   // CS pierna derecha
+        static constexpr int PIN_SCK  = 36;
+        static constexpr int PIN_MISO = 37;
+        static constexpr int PIN_MOSI = 35;
 
         // =================== Protocolo ===================
         static constexpr uint8_t PROTO_VERSION = 0x01;
@@ -426,6 +426,14 @@ namespace Aquiles {
 
             // Opcional: fijar el ángulo como meta final (simular fin de paso)
             Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
+          }
+          static uint32_t lastLog = 0;
+          uint32_t now = millis();
+          if (now - lastLog > 500) {
+            lastLog = now;
+            Serial.printf("[SPI] seq=%u frame=%u enc_q15=%d flags=0x%04X reserved=[%u,%u,%u,%u,%u]\n",
+              f.seq, f.frame_ctr, f.enc_q15, f.flags,
+              f.reserved[0], f.reserved[1], f.reserved[2], f.reserved[3], f.reserved[4]);
           }
         }
 
