@@ -25,11 +25,10 @@ namespace DriverSPI {
     static volatile uint32_t g_last_cmd_us = 0;
 
     struct Pins {
-      uint8_t sck  = 18;
-      uint8_t mosi = 19;
-      uint8_t miso = 16;
-      uint8_t cs   = 17;
-      uint8_t drdy = 22;
+      uint8_t sck  = 10;
+      uint8_t mosi = 11;
+      uint8_t miso = 12;
+      uint8_t cs   = 13;
     };
     static Pins PIN;
 
@@ -126,7 +125,6 @@ namespace DriverSPI {
       g_frame_ctr++;
       g_seq++;
       restore_interrupts(irq);
-      if (PIN.drdy) { gpio_put(PIN.drdy, 1); sleep_us(5); gpio_put(PIN.drdy, 0); }
       return true;
     }
 
@@ -166,7 +164,6 @@ namespace DriverSPI {
       gpio_set_function(PIN.mosi, GPIO_FUNC_SPI);
       gpio_set_function(PIN.miso, GPIO_FUNC_SPI);
       gpio_init(PIN.cs); gpio_set_dir(PIN.cs, GPIO_IN); gpio_pull_up(PIN.cs);
-      if (PIN.drdy) { gpio_init(PIN.drdy); gpio_set_dir(PIN.drdy, GPIO_OUT); gpio_put(PIN.drdy, 0); }
 
       spi_init(spi0, 1000000);
       spi_set_slave(spi0, true);
