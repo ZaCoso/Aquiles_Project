@@ -163,5 +163,12 @@ namespace Aquiles {
         void Init(void* params);
         void Blink(void* params);
     }
-
+    namespace Power{
+    void  init();
+    void  setCal(uint8_t tapIdx, float gain, float offs);
+    float getCellV(uint8_t i);
+    float getCellSOC(uint8_t i);
+    float getPackSOC();
+    float getPackSOCmin();
+  }
 } // namespace Aquiles
