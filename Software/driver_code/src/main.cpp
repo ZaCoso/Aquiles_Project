@@ -42,6 +42,9 @@ static constexpr uint16_t FLAG_OC = (1u << 0);
 namespace DriverSPI {
     static volatile uint32_t g_last_cmd_us = 0;
     // ===================== Config y protocolo =====================
+    // ---- E-STOP por protocolo + modos ----
+    enum : uint8_t { MODE_OFF=0, MODE_TORQUE=1, MODE_VELOCITY=2, MODE_POSITION=3 };
+    static volatile bool g_estop_latched = false;
     struct Pins {
       uint8_t sck  = 10;
       uint8_t mosi = 11;
@@ -266,6 +269,9 @@ namespace DriverSPI {
       if (ok) {
         memcpy((void*)&g_last_cmd, &cmd, sizeof(ActuationCmdV1));
         g_last_cmd_us = micros32();
+          if (cmd.mode == MODE_OFF) {
+              g_estop_latched = true;
+              }
       }
 
       // 2) Snapshot del último frame
@@ -446,8 +452,17 @@ void initSimpleFOC() {
 
   Serial.println("Motor con FOC inicializado!");
 }
-
-
+static inline void hard_stop_driver() {
+  motor.move(0.0f);                 // PWM a cero
+  digitalWrite(EN1, LOW);
+  digitalWrite(EN2, LOW);
+  digitalWrite(EN3, LOW);
+}
+static inline void enable_driver_if_safe() {
+  digitalWrite(EN1, HIGH);
+  digitalWrite(EN2, HIGH);
+  digitalWrite(EN3, HIGH);
+}
 // --- Función para mover el motor en velocidad ---
 void MotorVelMove(float vel) {
   motor.loopFOC();
@@ -578,22 +593,31 @@ void loop() {
   uint8_t  seq   = 0;
   uint32_t age_us = 0xFFFFFFFF;
   bool have_cmd = DriverSPI::copyLastCmd(cmd, seq, age_us);
+// condiciones de seguridad
+  bool cmd_fresh   = have_cmd && (age_us/1000u) <= FAILSAFE_MS;   // 50 ms
+  bool estop_latch = DriverSPI::g_estop_latched;
 
   // failsafe & target
   float target_motor = 0.0f;
-  if (!oc_active && have_cmd && (age_us/1000u) <= FAILSAFE_MS) {
-    target_motor = compute_motor_vel_from_cmd(cmd); // [rad/s] eje motor
-  }
+// Árbol de decisión
+  if (estop_latch) {
+    // 1) E-STOP por protocolo → bloqueado hasta reset
+    hard_stop_driver();
 
-  // rampa
-  g_target_vel_motor = apply_slew(target_motor, g_target_vel_motor, dt);
+  } else if (oc_active) {
+    // 2) Sobre-corriente detectada local → hard stop
+    hard_stop_driver();
 
-  // HARD-STOP por OC
-  if (oc_active) {
-    motor.move(0.0f);
-    digitalWrite(EN1, LOW); digitalWrite(EN2, LOW); digitalWrite(EN3, LOW);
+  } else if (!cmd_fresh) {
+    // 3) No llegan comandos (ESP32 paró SPI) → hard stop
+    hard_stop_driver();
+
   } else {
-    digitalWrite(EN1, HIGH); digitalWrite(EN2, HIGH); digitalWrite(EN3, HIGH);
+    // 4) Normal: aplica rampa y mueve
+    target_motor = compute_motor_vel_from_cmd(cmd);   // [rad/s] eje motor
+    g_target_vel_motor = apply_slew(target_motor, g_target_vel_motor, dt);
+
+    enable_driver_if_safe();
     motor.loopFOC();
     motor.move(g_target_vel_motor);
   }

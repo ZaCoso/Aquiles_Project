@@ -163,6 +163,11 @@ namespace Aquiles {
         void Init(void* params);
         void Blink(void* params);
     }
+    namespace Safety {
+        void init();           // Inicializa el pin del botón de emergencia
+        bool triggered();      // Consulta si se ha presionado el botón
+    }
+
     namespace Power{
     void  init();
     void  setCal(uint8_t tapIdx, float gain, float offs);
