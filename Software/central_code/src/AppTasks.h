@@ -163,5 +163,9 @@ namespace Aquiles {
         void Init(void* params);
         void Blink(void* params);
     }
+    namespace Safety {
+        void init();           // Inicializa el pin del botón de emergencia
+        bool triggered();      // Consulta si se ha presionado el botón
+    }
 
 } // namespace Aquiles

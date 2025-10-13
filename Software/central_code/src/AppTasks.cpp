@@ -461,7 +461,10 @@ namespace Aquiles {
 
           for (;;) {
             ++seq;
-
+            if (Aquiles::Safety::triggered()) {
+              Serial.println("[SPI] E-STOP: deteniendo tarea SPI.");
+              vTaskDelete(nullptr);      // mata la tarea SPI definitivamente
+            }
             auto cmdL = Detection::getCmd(Leg::L);
             auto cmdR = Detection::getCmd(Leg::R);
             // --- Detecta sobrecorriente proveniente del RP2040 ---
@@ -510,4 +513,14 @@ namespace Aquiles {
           xTaskCreatePinnedToCore(vSpiTickTask, "SpiTick", 4096, nullptr, 5, nullptr, 1);
         }
     } // namespace SPIBus
+    namespace Safety {
+        constexpr int PIN_ESTOP = 8;          // ajustá a tu botón
+        static volatile bool g_estop = false;
+        void IRAM_ATTR isr_estop(){ g_estop = true; }
+        void init(){
+          pinMode(PIN_ESTOP, INPUT_PULLDOWN);  // activo en HIGH
+          attachInterrupt(digitalPinToInterrupt(PIN_ESTOP), isr_estop, RISING);
+        }
+        inline bool triggered(){ return g_estop; }
+        } // namespace Safety
 } // namespace Aquiles
