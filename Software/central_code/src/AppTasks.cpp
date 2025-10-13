@@ -508,10 +508,10 @@ namespace Aquiles {
     namespace Power {
 
       // ---- PINS (ajustá a tu placa) ----
-      static constexpr int ADC_C1_PIN = 34;   // tap celda 1 (V_C1)
-      static constexpr int ADC_C2_PIN = 35;   // tap celda 2 (V_C2)
-      static constexpr int ADC_C3_PIN = 36;   // tap celda 3 (V_C3)
-      static constexpr int ADC_C4_PIN = 39;   // tap celda 4 (V_C4)
+      static constexpr int ADC_C1_PIN = 1;   // tap celda 1 (V_C1)
+      static constexpr int ADC_C2_PIN = 2;   // tap celda 2 (V_C2)
+      static constexpr int ADC_C3_PIN = 3;   // tap celda 3 (V_C3)
+      static constexpr int ADC_C4_PIN = 4;   // tap celda 4 (V_C4)
 
       // ---- ADC params ----
       static constexpr float VREF = 3.300f;   // referencia ADC efectiva (calibrar)
