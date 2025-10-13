@@ -339,11 +339,11 @@ namespace Aquiles {
         static inline uint8_t xfer(uint8_t b) { return SPI.transfer(b); }
 
         // Pines (ajustá según tu hardware)
-        static constexpr int CS_L = 38;    // CS pierna izquierda
-        static constexpr int CS_R = 39;   // CS pierna derecha
-        static constexpr int PIN_SCK  = 36;
-        static constexpr int PIN_MISO = 37;
-        static constexpr int PIN_MOSI = 35;
+        static constexpr int CS_L = 15;    // CS pierna izquierda
+        static constexpr int CS_R = 7;   // CS pierna derecha
+        static constexpr int PIN_SCK  = 16;
+        static constexpr int PIN_MISO = 6;
+        static constexpr int PIN_MOSI = 5;
 
         // =================== Protocolo ===================
         static constexpr uint8_t PROTO_VERSION = 0x01;
