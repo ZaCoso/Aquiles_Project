@@ -274,17 +274,17 @@ namespace Aquiles {
         }
 
         void enviarEstado() {
-            static int bat = 0;
-            bat = (bat + 1) % 101;
-            String mensaje = "BAT:" + String(bat);
+            float pavg = Aquiles::Power::getPackSOC();
+            char msg[96];
+            snprintf(msg, sizeof(msg), "BAT:avg=%.1f",pavg);
 
             if (pCharacteristic) {
-                pCharacteristic->setValue(mensaje.c_str());
+                pCharacteristic->setValue(msg);
                 pCharacteristic->notify();
             }
 
             Serial.print("Enviado: ");
-            Serial.println(mensaje);
+            Serial.println(msg);
         }
 
         void TaskNotify(void* /*pv*/) {
