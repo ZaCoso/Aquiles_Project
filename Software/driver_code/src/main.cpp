@@ -47,8 +47,8 @@ namespace DriverSPI {
     static volatile bool g_estop_latched = false;
     struct Pins {
       uint8_t sck  = 10;
-      uint8_t mosi = 11;
-      uint8_t miso = 12;
+      uint8_t mosi = 12;
+      uint8_t miso = 11;
       uint8_t cs   = 13;
     };
 
@@ -63,6 +63,8 @@ namespace DriverSPI {
 
     // Flag de sobrecorriente para avisar al master
     static constexpr uint16_t FLAG_OC = (1u << 0);
+    static volatile bool g_cs_falling = false;   // <--- NUEVO
+    static constexpr int SPI_DEBUG = 0;   
 
     #pragma pack(push,1)
     struct ActuationCmdV1 {
@@ -184,9 +186,11 @@ namespace DriverSPI {
       gz   = g.gyro.z;
     }
     static void fillTelemetry(TelemetryFrameV1& f) {
+      // Copy the latest sensor snapshot (atomic) — no I2C, no Serial here.
       SensorSnap s{};
       uint32_t irq = save_and_disable_interrupts();
-      memcpy(&s, (const void*)&g_snap, sizeof(SensorSnap));  
+      // copy from volatile snapshot without triggering volatile assignment ambiguity
+      memcpy(&s, (const void*)&g_snap, sizeof(SensorSnap));
       restore_interrupts(irq);
 
       f.sof       = TEL_SOF;
@@ -194,38 +198,41 @@ namespace DriverSPI {
       f.len       = TEL_LEN_FIELD;
       f.seq       = g_seq;
       f.t_us      = micros32();
+
+      // Flags
       f.flags     = 0;
       if (s.overcurrent) f.flags |= FLAG_OC;
-      f.sample_hz = 1000;                 // 1 kHz
-      f.enc_q15   = rad_to_q15(encoder_5600());
-      // auto mpu_data = readMPU6050();  // actualizar datos del MPU6050
-      // // IMU demo (dejar en 0/1g)
-      // f.mpu_ax_q14 = g_to_q14(mpu_data[0]);
-      // f.mpu_ay_q14 = g_to_q14(mpu_data[1]);
-      // f.mpu_az_q14 = g_to_q14(mpu_data[2]);
-      // f.mpu_gx_q14 = gyro_to_q15(mpu_data[3], 4.3633f);
-      // f.mpu_gy_q14 = gyro_to_q15(mpu_data[4], 4.3633f);
-      // f.mpu_gz_q14 = gyro_to_q15(mpu_data[5], 4.3633f);
-      f.mpu_ax_q14 = 0;
-      f.mpu_ay_q14 = 0;
-      f.mpu_az_q14 = 0;
-      f.mpu_gx_q14 = 0;
-      f.mpu_gy_q14 = 0;
-      f.mpu_gz_q14 = 0;
+
+      // Meta
+      f.sample_hz = 1000;                 // 1 kHz nominal
+
+      // Encoder from snapshot (radians -> q15 turn fraction)
+      f.enc_q15   = rad_to_q15(s.enc_rad);
+
+      // IMU from snapshot (already in g and rad/s)
+      f.mpu_ax_q14 = g_to_q14(s.ax_g);
+      f.mpu_ay_q14 = g_to_q14(s.ay_g);
+      f.mpu_az_q14 = g_to_q14(s.az_g);
+
+      // Gyro scaled to q15 with max range used previously
+      f.mpu_gx_q14 = gyro_to_q15(s.gx_rads, 4.3633f);
+      f.mpu_gy_q14 = gyro_to_q15(s.gy_rads, 4.3633f);
+      f.mpu_gz_q14 = gyro_to_q15(s.gz_rads, 4.3633f);
 
       f.err_code  = 0;
       f.frame_ctr = (uint16_t)(g_frame_ctr & 0xFFFF);
 
-      // ---- Mapear I_peak y phase_peak compactos en reserved ----
-      // reserved[0..1] = I_peak_q15 (A * 1024, signado)
+      // Compact currents: I_peak (A) -> q10 (A * 1024) in reserved[0..1]
       int16_t ipeak_q15 = (int16_t)lrintf(s.i_peak * 1024.0f);
       f.reserved[0] = (uint8_t)(ipeak_q15 & 0xFF);
       f.reserved[1] = (uint8_t)((ipeak_q15 >> 8) & 0xFF);
-      // reserved[2] = phase_peak (0..2) y bit7=OC activo
+      // reserved[2] = phase_peak (0..2) | bit7=OC
       f.reserved[2] = (uint8_t)((s.overcurrent ? 0x80 : 0x00) | (s.phase_peak & 0x03));
       f.reserved[3] = 0;
       f.reserved[4] = 0;
-      f.crc8      = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE-1, 0x00);
+
+      // CRC over TEL_SIZE-1 bytes
+      f.crc8 = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE-1, 0x00);
     }
 
     // ===================== Timer 1 kHz: cerrar frame + swap =====================
@@ -251,18 +258,15 @@ namespace DriverSPI {
     static inline bool tx_byte_timeout(uint8_t b, uint32_t timeout_us);
 
     // ===================== Transacción SPI: RX 16B + TX 36B =====================
-    static bool serve_transaction_safe(uint32_t timeout_us_per_byte = 200) {
-      if (gpio_get(PIN.cs)) return false;                   // CS alto → nada que hacer
-
-      // 1) RX comando 16B con timeout
-      ActuationCmdV1 cmd{};
-      for (int i=0; i<(int)ACT_SIZE; ++i) {
-        uint8_t b;
-        if (!rx_byte_timeout(b, timeout_us_per_byte)) return false;  // aborta limpio
+   
+    static void serve_transaction() {
+      // *** NO Serial.print aquí si estás en tiempo crítico ***
+      ActuationCmdV1 cmd{}; 
+      for (int i=0;i<(int)ACT_SIZE;i++) {
+        uint8_t b; spi_read_blocking(spi0, 0x00, &b, 1);
         reinterpret_cast<uint8_t*>(&cmd)[i] = b;
       }
 
-      // Validación
       bool ok = (cmd.sof==ACT_SOF && cmd.version==PROTO_VERSION && cmd.len==(ACT_SIZE-1));
       uint8_t ccrc = crc8_0x07(reinterpret_cast<const uint8_t*>(&cmd), ACT_SIZE-1, 0x00);
       ok = ok && (ccrc == cmd.crc8);
@@ -274,7 +278,6 @@ namespace DriverSPI {
               }
       }
 
-      // 2) Snapshot del último frame
       TelemetryFrameV1 snap{};
       {
         uint32_t irq = save_and_disable_interrupts();
@@ -282,8 +285,7 @@ namespace DriverSPI {
         restore_interrupts(irq);
       }
 
-      // 3) TX 36B con timeout
-      for (int i=0; i<(int)TEL_SIZE; ++i) {
+      for (int i=0;i<(int)TEL_SIZE;i++) {
         uint8_t b = reinterpret_cast<uint8_t*>(&snap)[i];
         if (!tx_byte_timeout(b, timeout_us_per_byte)) return false;
       }
@@ -306,18 +308,26 @@ namespace DriverSPI {
         if (gpio_get(PIN.cs)) return false;
         if ((micros32() - t0) > timeout_us) return false;
       }
-      spi_get_hw(spi1)->dr = b;                             // poner un byte en TX FIFO
-      return true;
-    }
 
-    // ===================== IRQ por CS (flanco ↓ = 1 transacción) =================
-    // Firma correcta para Philhower/Pico SDK:
+      // Log fuera del tiempo crítico (opcional) — NO dentro si SPI_DEBUG=0
+      if constexpr (SPI_DEBUG) {
+        Serial.print("[SPI RX] ");
+        for (int i=0; i<(int)ACT_SIZE; i++) {
+          uint8_t b = reinterpret_cast<uint8_t*>(&cmd)[i];
+          Serial.printf("%02X ", b);
+        }
+        Serial.println();
+      }
+    }
+  // ISR: sólo marcar flag
     static void cs_isr(uint gpio, uint32_t events) {
       (void)events;
       if (gpio == PIN.cs && !gpio_get(PIN.cs)) {
-        g_xfer_pending = true;  
+        g_cs_falling = true;   // <--- SOLO marcar
       }
     }
+
+
     inline bool copyLastCmd(ActuationCmdV1& out, uint8_t& seq_out, uint32_t& age_us_out) {
       uint32_t irq = save_and_disable_interrupts();
       ActuationCmdV1 tmp;
@@ -520,58 +530,74 @@ void setup() {
   encoder_i2c.begin();
 
   // --- SPI: remapear MISO a GPIO12 para no chocar con LED_PIN=16 ---
-  DriverSPI::setPins({ .sck=10, .mosi=11, .miso=12, .cs=13});
+  DriverSPI::setPins({ .sck=10, .mosi=12, .miso=11, .cs=13});
   DriverSPI::begin();
-
+// //
+//
+//RK: Commentado debido a falla por falta de sensor
   // // Auto-zero offsets de ACS712 (sin corriente)
-  DriverSPI::CAL_A.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_A.adc_ch, 256);
-  DriverSPI::CAL_B.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_B.adc_ch, 256);
-  DriverSPI::CAL_C.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_C.adc_ch, 256);
-  
-  // initSimpleFOC();
+  // DriverSPI::CAL_A.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_A.adc_ch, 256);
+  // DriverSPI::CAL_B.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_B.adc_ch, 256);
+  // DriverSPI::CAL_C.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_C.adc_ch, 256);
+
+  encoder_i2c.begin();
+  encoder_i2c.setDirection(AS5600_CLOCK_WISE);
+
+  initSimpleFOC();
   pixels.begin();
   pixels.clear();
   pixels.show();
   pinMode(7, OUTPUT);
-  digitalWrite(7, LOW);
+  digitalWrite(7, LOW); // LED interno del Waveshare RP2040 Zero
 }
 
 void loop() {
-  // dt para rampa
-  Serial.println("B");
-  uint32_t now_us = to_us_since_boot(get_absolute_time());
-  if (g_last_tick_us == 0) g_last_tick_us = now_us;
-  float dt = (now_us - g_last_tick_us) * 1e-6f;
-  g_last_tick_us = now_us;
-  // Despachar transacción SPI desde main loop (no en ISR)
-  if (DriverSPI::g_xfer_pending) {
-    // Solo si CS sigue LOW intentamos transferir
-    if (!gpio_get(DriverSPI::PIN.cs)) {
-      DriverSPI::serve_transaction_safe(200);  // 200 us/byte; ajustable
+  // Serial.println("Iniciando loop");
+  // ===== 0) Atender SPI slave fuera de ISR (no bloquear USB CDC) =====
+  if (DriverSPI::g_inited && DriverSPI::g_cs_falling && !gpio_get(DriverSPI::PIN.cs)) {
+    DriverSPI::g_cs_falling = false;
+
+    // Transacción completa (RX 16B + TX 36B), sin Serial.print adentro
+    DriverSPI::serve_transaction();
+
+    // Esperar a que el master libere CS (opcional, evita logs mientras CS está LOW)
+    uint32_t t0 = to_us_since_boot(get_absolute_time());
+    while (!gpio_get(DriverSPI::PIN.cs) && (to_us_since_boot(get_absolute_time()) - t0) < 2000) {
+      tight_loop_contents();
     }
-    DriverSPI::g_xfer_pending = false;         // limpiar flag SIEMPRE
+    // Si querés loguear, hacelo acá (ya estamos fuera de tiempo crítico)
+    // Serial.println("[SPI] transacción atendida");
   }
-//  --- Sampleo cada ~2 ms (encoder, IMU, corrientes 3φ) ---
+
+  // ===== 1) Tiempo y dt para rampa =====
+  static uint32_t g_last_tick_us_local = 0;
+  uint32_t now_us = to_us_since_boot(get_absolute_time());
+  if (g_last_tick_us_local == 0) g_last_tick_us_local = now_us;
+  float dt = (now_us - g_last_tick_us_local) * 1e-6f;
+  g_last_tick_us_local = now_us;
+
+  // ===== 2) Sampleo periódico de sensores (~2 ms) =====
   static uint32_t last_sense_us = 0;
   if (now_us - last_sense_us >= 2000) {
     last_sense_us = now_us;
 
     DriverSPI::SensorSnap s{};
+    // Encoder (rad 0..2π, sin prints)
     s.enc_rad = DriverSPI::read_encoder_rad_noprint();
 
-    // IMU
-    // DriverSPI::sample_mpu(s.ax_g, s.ay_g, s.az_g, s.gx_rads, s.gy_rads, s.gz_rads);
+    // IMU (a[g], g[rad/s])
+    DriverSPI::sample_mpu(s.ax_g, s.ay_g, s.az_g, s.gx_rads, s.gy_rads, s.gz_rads);
 
-    // Corriente 3 fases (ACS712-05B)
+    // Corriente 3φ (ACS712-05B en ADC0/1/2 => GPIO26/27/28)
     DriverSPI::read_currents_3ph(s.iA, s.iB, s.iC);
     float aA = fabsf(s.iA), aB = fabsf(s.iB), aC = fabsf(s.iC);
     s.i_peak = aA; s.phase_peak = 0;
     if (aB > s.i_peak) { s.i_peak = aB; s.phase_peak = 1; }
     if (aC > s.i_peak) { s.i_peak = aC; s.phase_peak = 2; }
 
-    // Latch de sobrecorriente hardware (AJUSTAR UMBRAL)
-    static constexpr float    I_HW_TRIP_A     = 6.5f;  // p. inicial para 05B
-    static constexpr uint32_t HW_TRIP_HOLD_MS = 150;
+    // Latch de sobrecorriente (ajustá umbral según tu sensor/hardware)
+    static constexpr float    I_HW_TRIP_A     = 6.5f;   // umbral inicial para ACS712-05B
+    static constexpr uint32_t HW_TRIP_HOLD_MS = 150;    // tiempo de retención
     uint32_t now_ms = now_us / 1000u;
     if (s.i_peak > I_HW_TRIP_A) {
       DriverSPI::g_oc_hold_until_ms = now_ms + HW_TRIP_HOLD_MS;
@@ -579,16 +605,16 @@ void loop() {
     s.overcurrent = (now_ms < DriverSPI::g_oc_hold_until_ms);
     s.t_us = now_us;
 
-    // Publicar snapshot atómico
+    // Publicar snapshot atómico para Telemetry
     uint32_t irq = save_and_disable_interrupts();
-    memcpy((void*)&DriverSPI::g_snap, &s, sizeof(DriverSPI::SensorSnap)); 
+    memcpy((void*)&DriverSPI::g_snap, &s, sizeof(DriverSPI::SensorSnap));
     restore_interrupts(irq);
   }
 
-  // snapshot de OC
+  // ===== 3) Estado de OC (latched) =====
   bool oc_active = ((to_us_since_boot(get_absolute_time())/1000u) < DriverSPI::g_oc_hold_until_ms);
 
-  // snapshot del último comando recibido por SPI
+  // ===== 4) Último comando SPI + Failsafe por edad =====
   DriverSPI::ActuationCmdV1 cmd{};
   uint8_t  seq   = 0;
   uint32_t age_us = 0xFFFFFFFF;
@@ -597,21 +623,18 @@ void loop() {
   bool cmd_fresh   = have_cmd && (age_us/1000u) <= FAILSAFE_MS;   // 50 ms
   bool estop_latch = DriverSPI::g_estop_latched;
 
-  // failsafe & target
-  float target_motor = 0.0f;
-// Árbol de decisión
-  if (estop_latch) {
-    // 1) E-STOP por protocolo → bloqueado hasta reset
-    hard_stop_driver();
+  float target_motor = 0.0f; // [rad/s] en eje del motor
+  if (!oc_active && have_cmd && (age_us/1000u) <= FAILSAFE_MS) {
+    target_motor = compute_motor_vel_from_cmd(cmd);
+  }
+  // Rampa (slew-rate)
+  g_target_vel_motor = apply_slew(target_motor, g_target_vel_motor, dt);
 
-  } else if (oc_active) {
-    // 2) Sobre-corriente detectada local → hard stop
-    hard_stop_driver();
-
-  } else if (!cmd_fresh) {
-    // 3) No llegan comandos (ESP32 paró SPI) → hard stop
-    hard_stop_driver();
-
+  // ===== 5) Actuación segura =====
+  if (oc_active) {
+    // Paro duro: sin FOC, deshabilitá las fases
+    motor.move(0.0f);
+    digitalWrite(EN1, LOW); digitalWrite(EN2, LOW); digitalWrite(EN3, LOW);
   } else {
     // 4) Normal: aplica rampa y mueve
     target_motor = compute_motor_vel_from_cmd(cmd);   // [rad/s] eje motor
@@ -622,8 +645,11 @@ void loop() {
     motor.move(g_target_vel_motor);
   }
 
-  // LED feedback proporcional a |vel|
-  pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Verde máximo
+  // ===== 6) Feedback visual =====
+  // (Tip: no actualices NeoPixel dentro de una transacción SPI)
+  pixels.setPixelColor(0, pixels.Color(0, 255, 255));
   pixels.show();
+
+  // ===== 7) Ritmo general =====
   delay(1);
 }
