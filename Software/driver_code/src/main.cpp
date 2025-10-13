@@ -44,8 +44,8 @@ namespace DriverSPI {
     // ===================== Config y protocolo =====================
     struct Pins {
       uint8_t sck  = 10;
-      uint8_t mosi = 11;
-      uint8_t miso = 12;
+      uint8_t mosi = 12;
+      uint8_t miso = 11;
       uint8_t cs   = 13;
     };
 
@@ -244,6 +244,12 @@ namespace DriverSPI {
         uint8_t b; spi_read_blocking(spi0, 0x00, &b, 1);
         reinterpret_cast<uint8_t*>(&cmd)[i] = b;
       }
+      Serial.print("[SPI RX] ");
+      for (int i=0; i<(int)ACT_SIZE; i++) {
+        uint8_t b = reinterpret_cast<uint8_t*>(&cmd)[i];
+        Serial.printf("%02X ", b);   // imprime en hexadecimal
+      }
+      Serial.println();
       bool ok = (cmd.sof==ACT_SOF && cmd.version==PROTO_VERSION && cmd.len==(ACT_SIZE-1));
       uint8_t ccrc = crc8_0x07(reinterpret_cast<const uint8_t*>(&cmd), ACT_SIZE-1, 0x00);
       ok = ok && (ccrc == cmd.crc8);
@@ -469,21 +475,23 @@ void setup() {
   encoder_i2c.begin();
 
   // --- SPI: remapear MISO a GPIO12 para no chocar con LED_PIN=16 ---
-  DriverSPI::setPins({ .sck=10, .mosi=11, .miso=12, .cs=13});
-  DriverSPI::begin();
+  // DriverSPI::setPins({ .sck=10, .mosi=12, .miso=11, .cs=13});
+  // DriverSPI::begin();
 
   // Auto-zero offsets de ACS712 (sin corriente)
-  DriverSPI::CAL_A.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_A.adc_ch, 256);
-  DriverSPI::CAL_B.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_B.adc_ch, 256);
-  DriverSPI::CAL_C.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_C.adc_ch, 256);
+  // DriverSPI::CAL_A.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_A.adc_ch, 256);
+  // DriverSPI::CAL_B.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_B.adc_ch, 256);
+  // DriverSPI::CAL_C.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_C.adc_ch, 256);
 
-  // encoder_i2c.begin();
-  // encoder_i2c.setDirection(AS5600_CLOCK_WISE);
-  // init_spi_slave();
+  encoder_i2c.begin();
+  encoder_i2c.setDirection(AS5600_CLOCK_WISE);
+
   initSimpleFOC();
   pixels.begin();
   pixels.clear();
   pixels.show();
+  pinMode(7, OUTPUT);
+  digitalWrite(7, LOW); // LED interno del Waveshare RP2040 Zero
 }
 
 void loop() {

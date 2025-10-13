@@ -342,8 +342,8 @@ namespace Aquiles {
         static constexpr int CS_L = 15;    // CS pierna izquierda
         static constexpr int CS_R = 7;   // CS pierna derecha
         static constexpr int PIN_SCK  = 16;
-        static constexpr int PIN_MISO = 6;
-        static constexpr int PIN_MOSI = 5;
+        static constexpr int PIN_MISO = 5;
+        static constexpr int PIN_MOSI = 6;
 
         // =================== Protocolo ===================
         static constexpr uint8_t PROTO_VERSION = 0x01;
