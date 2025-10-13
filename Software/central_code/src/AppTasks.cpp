@@ -274,17 +274,17 @@ namespace Aquiles {
         }
 
         void enviarEstado() {
-            static int bat = 0;
-            bat = (bat + 1) % 101;
-            String mensaje = "BAT:" + String(bat);
+            float pavg = Aquiles::Power::getPackSOC();
+            char msg[96];
+            snprintf(msg, sizeof(msg), "BAT:avg=%.1f",pavg);
 
             if (pCharacteristic) {
-                pCharacteristic->setValue(mensaje.c_str());
+                pCharacteristic->setValue(msg);
                 pCharacteristic->notify();
             }
 
             Serial.print("Enviado: ");
-            Serial.println(mensaje);
+            Serial.println(msg);
         }
 
         void TaskNotify(void* /*pv*/) {
@@ -523,4 +523,143 @@ namespace Aquiles {
         }
         inline bool triggered(){ return g_estop; }
         } // namespace Safety
+      // ================= BATTERY / POWER =================
+    namespace Power {
+
+      // ---- PINS (ajustá a tu placa) ----
+      static constexpr int ADC_C1_PIN = 1;   // tap celda 1 (V_C1)
+      static constexpr int ADC_C2_PIN = 2;   // tap celda 2 (V_C2)
+      static constexpr int ADC_C3_PIN = 3;   // tap celda 3 (V_C3)
+      static constexpr int ADC_C4_PIN = 4;   // tap celda 4 (V_C4)
+
+      // ---- ADC params ----
+      static constexpr float VREF = 3.300f;   // referencia ADC efectiva (calibrar)
+      static constexpr int   ADC_MAX = 4095;  // 12 bits
+
+      // ---- Divisores (TU ESQUEMA) ----
+      // Cada tap mide "pack parcial hasta esa celda" vs GND con un divisor distinto:
+      // Vadc = Vtap * Rbottom/(Rtop+Rbottom)  => Vtap = Vadc * (Rtop+Rbottom)/Rbottom
+      // Rbottom es 2.2k en los 4; Rtop es 1.2k, 4.3k, 8.2k, 12k respectivamente.
+      static constexpr float Rbot[4] = {2200.0f, 2200.0f, 2200.0f, 2200.0f};
+      static constexpr float Rtop[4] = {1200.0f, 4300.0f, 8200.0f,12000.0f};
+
+      // ---- Calibración por tap (ganancia/offset) ----
+      // Ajustá estos luego de medir con multímetro (gain ~1.0, offs ~0.0 V).
+      struct Cal { float gain; float offs; };
+      static Cal CAL[4] = {
+        {1.000f, 0.000f}, {1.000f, 0.000f}, {1.000f, 0.000f}, {1.000f, 0.000f}
+      };
+
+      // ---- Estado filtrado ----
+      static float tap_V[4]   = {0,0,0,0};   // voltaje real en cada tap (V_C1..V_C4)
+      static float cell_V[4]  = {0,0,0,0};   // voltaje por celda
+      static float cell_SOC[4]= {0,0,0,0};   // % por celda
+      static float pack_SOC   = 0.0f;        // promedio
+      static float pack_SOC_min = 0.0f;      // mínimo (conservador)
+      static SemaphoreHandle_t mtx = nullptr;
+
+      // ---- LUT OCV → % (temperatura ambiente, reposo/carga liviana) ----
+      struct Pt { float v, soc; };
+      static const Pt LUT[] = {
+        {4.20f,100},{4.15f,95},{4.10f,90},{4.05f,85},{4.00f,80},
+        {3.95f,70},{3.90f,60},{3.85f,50},{3.80f,40},{3.75f,30},
+        {3.70f,20},{3.65f,12},{3.60f,8},{3.55f,5},{3.50f,3},
+        {3.45f,2},{3.40f,1},{3.30f,0}
+      };
+      static constexpr int LUTN = sizeof(LUT)/sizeof(LUT[0]);
+
+      static inline float soc_from_v(float v){
+        if (v >= LUT[0].v) return 100.0f;
+        if (v <= LUT[LUTN-1].v) return 0.0f;
+        for (int i=0;i<LUTN-1;i++){
+          if (v <= LUT[i].v && v >= LUT[i+1].v){
+            float t = (v - LUT[i+1].v) / (LUT[i].v - LUT[i+1].v);
+            return LUT[i+1].soc + t*(LUT[i].soc - LUT[i+1].soc);
+          }
+        }
+        return 0.0f;
+      }
+
+      static inline float ema(float x, float y, float a){ return a*x + (1.0f-a)*y; }
+
+      static float readTapVolt_raw(int pin, int idx){
+        uint16_t adc = analogRead(pin);
+        float vadc = (adc * VREF) / ADC_MAX;                           // V en el pin MCU
+        float vtap = vadc * (Rtop[idx] + Rbot[idx]) / Rbot[idx];       // V real en el tap
+        // Calibración por tap:
+        return CAL[idx].gain * vtap + CAL[idx].offs;
+      }
+
+      static void compute_cells_from_taps(){
+        // c1 = tap1
+        cell_V[0] = tap_V[0];
+        // c2 = tap2 - tap1
+        cell_V[1] = tap_V[1] - tap_V[0];
+        // c3 = tap3 - tap2
+        cell_V[2] = tap_V[2] - tap_V[1];
+        // c4 = tap4 - tap3
+        cell_V[3] = tap_V[3] - tap_V[2];
+
+        // Clamp por seguridad (evita negativos por ruido)
+        for (int i=0;i<4;i++){
+          if (cell_V[i] < 0.0f) cell_V[i] = 0.0f;
+        }
+      }
+
+      static void update_soc(){
+        float smin = 100.0f, ssum = 0.0f;
+        for (int i=0;i<4;i++){
+          cell_SOC[i] = soc_from_v(cell_V[i]);
+          ssum += cell_SOC[i];
+          if (cell_SOC[i] < smin) smin = cell_SOC[i];
+        }
+        pack_SOC = ssum / 4.0f;
+        pack_SOC_min = smin;
+      }
+
+      // ===== Tarea de muestreo/filtrado =====
+      static void vTaskMon(void*){
+        const TickType_t period = pdMS_TO_TICKS(200);  // 5 Hz
+        for(;;){
+          float t1 = readTapVolt_raw(ADC_C1_PIN,0);
+          float t2 = readTapVolt_raw(ADC_C2_PIN,1);
+          float t3 = readTapVolt_raw(ADC_C3_PIN,2);
+          float t4 = readTapVolt_raw(ADC_C4_PIN,3);
+
+          // EMA suave (a=0.3)
+          if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+          tap_V[0] = ema(t1, tap_V[0], 0.30f);
+          tap_V[1] = ema(t2, tap_V[1], 0.30f);
+          tap_V[2] = ema(t3, tap_V[2], 0.30f);
+          tap_V[3] = ema(t4, tap_V[3], 0.30f);
+
+          compute_cells_from_taps();
+          update_soc();
+          if (mtx) xSemaphoreGive(mtx);
+
+          vTaskDelay(period);
+        }
+      }
+
+      // ===== API =====
+      void init(){
+        analogReadResolution(12);
+        // (opcional) analogSetAttenuation(ADC_11db);
+        if (!mtx) mtx = xSemaphoreCreateMutex();
+        xTaskCreatePinnedToCore(vTaskMon, "BattMon", 3072, nullptr, 2, nullptr, 0);
+        Serial.println("[Power] Monitor de batería iniciado.");
+      }
+
+      // Seteo de calibración (ganancia/offset por tap)
+      void setCal(uint8_t tapIdx, float gain, float offs){
+        if (tapIdx<4) { CAL[tapIdx].gain = gain; CAL[tapIdx].offs = offs; }
+      }
+
+      // Getters thread-safe
+      float getCellV(uint8_t i){ float v=0; if (i<4){ if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); v=cell_V[i]; if(mtx) xSemaphoreGive(mtx);} return v; }
+      float getCellSOC(uint8_t i){ float s=0; if (i<4){ if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); s=cell_SOC[i]; if(mtx) xSemaphoreGive(mtx);} return s; }
+      float getPackSOC(){ float s; if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); s=pack_SOC; if(mtx) xSemaphoreGive(mtx); return s; }
+      float getPackSOCmin(){ float s; if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); s=pack_SOC_min; if(mtx) xSemaphoreGive(mtx); return s; }
+
+    } // namespace Power
 } // namespace Aquiles
