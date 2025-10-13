@@ -86,6 +86,7 @@ namespace DriverSPI {
     static volatile uint8_t  g_idx_wr = 0;
     static volatile uint8_t  g_idx_rd = 1;
     static volatile uint32_t g_frame_ctr = 0;
+    static volatile bool g_xfer_pending = false;
     static volatile uint8_t  g_seq       = 0;
     static volatile bool     g_started   = false;
     static volatile ActuationCmdV1 g_last_cmd{};
@@ -182,7 +183,7 @@ namespace DriverSPI {
     static void fillTelemetry(TelemetryFrameV1& f) {
       SensorSnap s{};
       uint32_t irq = save_and_disable_interrupts();
- 
+      memcpy(&s, (const void*)&g_snap, sizeof(SensorSnap));  
       restore_interrupts(irq);
 
       f.sof       = TEL_SOF;
@@ -194,14 +195,20 @@ namespace DriverSPI {
       if (s.overcurrent) f.flags |= FLAG_OC;
       f.sample_hz = 1000;                 // 1 kHz
       f.enc_q15   = rad_to_q15(encoder_5600());
-      auto mpu_data = readMPU6050();  // actualizar datos del MPU6050
-      // IMU demo (dejar en 0/1g)
-      f.mpu_ax_q14 = g_to_q14(mpu_data[0]);
-      f.mpu_ay_q14 = g_to_q14(mpu_data[1]);
-      f.mpu_az_q14 = g_to_q14(mpu_data[2]);
-      f.mpu_gx_q14 = gyro_to_q15(mpu_data[3], 4.3633f);
-      f.mpu_gy_q14 = gyro_to_q15(mpu_data[4], 4.3633f);
-      f.mpu_gz_q14 = gyro_to_q15(mpu_data[5], 4.3633f);
+      // auto mpu_data = readMPU6050();  // actualizar datos del MPU6050
+      // // IMU demo (dejar en 0/1g)
+      // f.mpu_ax_q14 = g_to_q14(mpu_data[0]);
+      // f.mpu_ay_q14 = g_to_q14(mpu_data[1]);
+      // f.mpu_az_q14 = g_to_q14(mpu_data[2]);
+      // f.mpu_gx_q14 = gyro_to_q15(mpu_data[3], 4.3633f);
+      // f.mpu_gy_q14 = gyro_to_q15(mpu_data[4], 4.3633f);
+      // f.mpu_gz_q14 = gyro_to_q15(mpu_data[5], 4.3633f);
+      f.mpu_ax_q14 = 0;
+      f.mpu_ay_q14 = 0;
+      f.mpu_az_q14 = 0;
+      f.mpu_gx_q14 = 0;
+      f.mpu_gy_q14 = 0;
+      f.mpu_gz_q14 = 0;
 
       f.err_code  = 0;
       f.frame_ctr = (uint16_t)(g_frame_ctr & 0xFFFF);
@@ -236,24 +243,32 @@ namespace DriverSPI {
       return true;
     }
 
+    // Forward decls (helpers implemented below)
+    static inline bool rx_byte_timeout(uint8_t& b, uint32_t timeout_us);
+    static inline bool tx_byte_timeout(uint8_t b, uint32_t timeout_us);
+
     // ===================== Transacción SPI: RX 16B + TX 36B =====================
-    static void serve_transaction() {
-      // 1) Recibir comando (16B)
-      ActuationCmdV1 cmd{}; 
-      for (int i=0;i<(int)ACT_SIZE;i++) {
-        uint8_t b; spi_read_blocking(spi0, 0x00, &b, 1);
+    static bool serve_transaction_safe(uint32_t timeout_us_per_byte = 200) {
+      if (gpio_get(PIN.cs)) return false;                   // CS alto → nada que hacer
+
+      // 1) RX comando 16B con timeout
+      ActuationCmdV1 cmd{};
+      for (int i=0; i<(int)ACT_SIZE; ++i) {
+        uint8_t b;
+        if (!rx_byte_timeout(b, timeout_us_per_byte)) return false;  // aborta limpio
         reinterpret_cast<uint8_t*>(&cmd)[i] = b;
       }
+
+      // Validación
       bool ok = (cmd.sof==ACT_SOF && cmd.version==PROTO_VERSION && cmd.len==(ACT_SIZE-1));
       uint8_t ccrc = crc8_0x07(reinterpret_cast<const uint8_t*>(&cmd), ACT_SIZE-1, 0x00);
       ok = ok && (ccrc == cmd.crc8);
       if (ok) {
-        // g_last_cmd es volatile → usar memcpy para evitar el warning
         memcpy((void*)&g_last_cmd, &cmd, sizeof(ActuationCmdV1));
         g_last_cmd_us = micros32();
       }
 
-      // 2) Snapshot del último frame “cerrado” (volatile → local)
+      // 2) Snapshot del último frame
       TelemetryFrameV1 snap{};
       {
         uint32_t irq = save_and_disable_interrupts();
@@ -261,11 +276,32 @@ namespace DriverSPI {
         restore_interrupts(irq);
       }
 
-      // 3) Transmitir (36B)
-      for (int i=0;i<(int)TEL_SIZE;i++) {
+      // 3) TX 36B con timeout
+      for (int i=0; i<(int)TEL_SIZE; ++i) {
         uint8_t b = reinterpret_cast<uint8_t*>(&snap)[i];
-        spi_write_blocking(spi0, &b, 1);
+        if (!tx_byte_timeout(b, timeout_us_per_byte)) return false;
       }
+
+      return true;
+    }
+    static inline bool rx_byte_timeout(uint8_t& b, uint32_t timeout_us){
+      uint32_t t0 = micros32();
+      while (!spi_is_readable(spi1)) {
+        if (gpio_get(PIN.cs)) return false;                 // CS subió → abortar
+        if ((micros32() - t0) > timeout_us) return false;   // sin reloj → abortar
+      }
+      b = (uint8_t)spi_get_hw(spi1)->dr;                    // leer un byte de RX FIFO
+      return true;
+    }
+
+    static inline bool tx_byte_timeout(uint8_t b, uint32_t timeout_us){
+      uint32_t t0 = micros32();
+      while (!spi_is_writable(spi1)) {
+        if (gpio_get(PIN.cs)) return false;
+        if ((micros32() - t0) > timeout_us) return false;
+      }
+      spi_get_hw(spi1)->dr = b;                             // poner un byte en TX FIFO
+      return true;
     }
 
     // ===================== IRQ por CS (flanco ↓ = 1 transacción) =================
@@ -273,7 +309,7 @@ namespace DriverSPI {
     static void cs_isr(uint gpio, uint32_t events) {
       (void)events;
       if (gpio == PIN.cs && !gpio_get(PIN.cs)) {
-        serve_transaction();
+        g_xfer_pending = true;  
       }
     }
     inline bool copyLastCmd(ActuationCmdV1& out, uint8_t& seq_out, uint32_t& age_us_out) {
@@ -307,10 +343,10 @@ namespace DriverSPI {
 
       // DRDY opcional
 
-      // SPI0 esclavo, modo 0
-      spi_init(spi0, 1000*1000);       // freq dummy
-      spi_set_slave(spi0, true);
-      spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+      // en begin()
+      spi_init(spi1, 1000*1000);
+      spi_set_slave(spi1, true);
+      spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
       // Registrar callback de GPIO con la firma correcta
       gpio_set_irq_enabled_with_callback(PIN.cs, GPIO_IRQ_EDGE_FALL, true, cs_isr);
@@ -329,7 +365,7 @@ namespace DriverSPI {
       // Timer 1 kHz
       add_repeating_timer_us(-1000, timer_cb, nullptr, &g_tim);
 
-      Serial.println("[DriverSPI] listo (SPI0 slave, 1 kHz).");
+      Serial.println("[DriverSPI] listo (SPI1 slave, 1 kHz).");
     }
 
     void end() {
@@ -344,7 +380,7 @@ namespace DriverSPI {
 } // namespace DriverSPI
 // --- Función para inicializar SimpleFOC ---
 // ====== Open-loop: escalas y seguridad ======
-static constexpr float   GEAR_RATIO              = 52.0f;     // 1:52
+static constexpr float   GEAR_RATIO              = 51.0f;     // 1:51
 static constexpr float   MAX_VEL_RAD_S_MOTOR     = 100.0f;    // límite [rad/s] eje motor
 static constexpr float   RAMP_RAD_S2             = 800.0f;    // rampa [rad/s^2]
 static constexpr float   DEADBAND_RAD_S          = 0.5f;      // zona muerta cerca de 0
@@ -465,36 +501,42 @@ void setup() {
   Wire1.setSDA(14);
   Wire1.setSCL(15);
   Wire1.begin();  
-  mpu.begin();     
+  // mpu.begin();     
   encoder_i2c.begin();
 
   // --- SPI: remapear MISO a GPIO12 para no chocar con LED_PIN=16 ---
   DriverSPI::setPins({ .sck=10, .mosi=11, .miso=12, .cs=13});
   DriverSPI::begin();
 
-  // Auto-zero offsets de ACS712 (sin corriente)
+  // // Auto-zero offsets de ACS712 (sin corriente)
   DriverSPI::CAL_A.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_A.adc_ch, 256);
   DriverSPI::CAL_B.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_B.adc_ch, 256);
   DriverSPI::CAL_C.offset_V = DriverSPI::autocal_offset_V(DriverSPI::CAL_C.adc_ch, 256);
-
-  // encoder_i2c.begin();
-  // encoder_i2c.setDirection(AS5600_CLOCK_WISE);
-  // init_spi_slave();
-  initSimpleFOC();
+  
+  // initSimpleFOC();
   pixels.begin();
   pixels.clear();
   pixels.show();
+  pinMode(7, OUTPUT);
+  digitalWrite(7, LOW);
 }
 
 void loop() {
   // dt para rampa
-
+  Serial.println("B");
   uint32_t now_us = to_us_since_boot(get_absolute_time());
   if (g_last_tick_us == 0) g_last_tick_us = now_us;
   float dt = (now_us - g_last_tick_us) * 1e-6f;
   g_last_tick_us = now_us;
-
- // --- Sampleo cada ~2 ms (encoder, IMU, corrientes 3φ) ---
+  // Despachar transacción SPI desde main loop (no en ISR)
+  if (DriverSPI::g_xfer_pending) {
+    // Solo si CS sigue LOW intentamos transferir
+    if (!gpio_get(DriverSPI::PIN.cs)) {
+      DriverSPI::serve_transaction_safe(200);  // 200 us/byte; ajustable
+    }
+    DriverSPI::g_xfer_pending = false;         // limpiar flag SIEMPRE
+  }
+//  --- Sampleo cada ~2 ms (encoder, IMU, corrientes 3φ) ---
   static uint32_t last_sense_us = 0;
   if (now_us - last_sense_us >= 2000) {
     last_sense_us = now_us;
@@ -503,7 +545,7 @@ void loop() {
     s.enc_rad = DriverSPI::read_encoder_rad_noprint();
 
     // IMU
-    DriverSPI::sample_mpu(s.ax_g, s.ay_g, s.az_g, s.gx_rads, s.gy_rads, s.gz_rads);
+    // DriverSPI::sample_mpu(s.ax_g, s.ay_g, s.az_g, s.gx_rads, s.gy_rads, s.gz_rads);
 
     // Corriente 3 fases (ACS712-05B)
     DriverSPI::read_currents_3ph(s.iA, s.iB, s.iC);
@@ -557,11 +599,7 @@ void loop() {
   }
 
   // LED feedback proporcional a |vel|
-  pixels.setPixelColor(0, pixels.Color(
-      0,
-      (uint8_t)map((long)fabs(g_target_vel_motor), 0, (long)MAX_VEL_RAD_S_MOTOR, 0, 200),
-      0));
+  pixels.setPixelColor(0, pixels.Color(0, 255, 255)); // Verde máximo
   pixels.show();
-
   delay(1);
 }
