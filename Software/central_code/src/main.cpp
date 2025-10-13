@@ -19,6 +19,7 @@ void setup() {
     Aquiles::Detection::begin(cfg);
     Aquiles::SPIBus::init();
     Aquiles::SPIBus::startTickTask();
+    Aquiles::Power::init();
 }
 
 void loop() {
