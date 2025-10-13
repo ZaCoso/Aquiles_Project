@@ -5,7 +5,7 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
     Serial.println("Iniciando...");
-
+    Aquiles::Safety::init();  
     xTaskCreate(Tasks::Init,  "Init",   tskINIT_STACK,  nullptr, tskINIT_PRIORITY,  nullptr);
     xTaskCreate(Tasks::Blink, "Blinky", tskBLINK_STACK, nullptr, tskBLINK_PRIORITY, nullptr);
 
@@ -19,6 +19,7 @@ void setup() {
     Aquiles::Detection::begin(cfg);
     Aquiles::SPIBus::init();
     Aquiles::SPIBus::startTickTask();
+    Aquiles::Power::init();
 }
 
 void loop() {

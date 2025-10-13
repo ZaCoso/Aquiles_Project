@@ -42,6 +42,9 @@ static constexpr uint16_t FLAG_OC = (1u << 0);
 namespace DriverSPI {
     static volatile uint32_t g_last_cmd_us = 0;
     // ===================== Config y protocolo =====================
+    // ---- E-STOP por protocolo + modos ----
+    enum : uint8_t { MODE_OFF=0, MODE_TORQUE=1, MODE_VELOCITY=2, MODE_POSITION=3 };
+    static volatile bool g_estop_latched = false;
     struct Pins {
       uint8_t sck  = 10;
       uint8_t mosi = 12;
@@ -88,6 +91,7 @@ namespace DriverSPI {
     static volatile uint8_t  g_idx_wr = 0;
     static volatile uint8_t  g_idx_rd = 1;
     static volatile uint32_t g_frame_ctr = 0;
+    static volatile bool g_xfer_pending = false;
     static volatile uint8_t  g_seq       = 0;
     static volatile bool     g_started   = false;
     static volatile ActuationCmdV1 g_last_cmd{};
@@ -249,6 +253,10 @@ namespace DriverSPI {
       return true;
     }
 
+    // Forward decls (helpers implemented below)
+    static inline bool rx_byte_timeout(uint8_t& b, uint32_t timeout_us);
+    static inline bool tx_byte_timeout(uint8_t b, uint32_t timeout_us);
+
     // ===================== Transacción SPI: RX 16B + TX 36B =====================
    
     static void serve_transaction() {
@@ -265,6 +273,9 @@ namespace DriverSPI {
       if (ok) {
         memcpy((void*)&g_last_cmd, &cmd, sizeof(ActuationCmdV1));
         g_last_cmd_us = micros32();
+          if (cmd.mode == MODE_OFF) {
+              g_estop_latched = true;
+              }
       }
 
       TelemetryFrameV1 snap{};
@@ -276,7 +287,26 @@ namespace DriverSPI {
 
       for (int i=0;i<(int)TEL_SIZE;i++) {
         uint8_t b = reinterpret_cast<uint8_t*>(&snap)[i];
-        spi_write_blocking(spi0, &b, 1);
+        if (!tx_byte_timeout(b, timeout_us_per_byte)) return false;
+      }
+
+      return true;
+    }
+    static inline bool rx_byte_timeout(uint8_t& b, uint32_t timeout_us){
+      uint32_t t0 = micros32();
+      while (!spi_is_readable(spi1)) {
+        if (gpio_get(PIN.cs)) return false;                 // CS subió → abortar
+        if ((micros32() - t0) > timeout_us) return false;   // sin reloj → abortar
+      }
+      b = (uint8_t)spi_get_hw(spi1)->dr;                    // leer un byte de RX FIFO
+      return true;
+    }
+
+    static inline bool tx_byte_timeout(uint8_t b, uint32_t timeout_us){
+      uint32_t t0 = micros32();
+      while (!spi_is_writable(spi1)) {
+        if (gpio_get(PIN.cs)) return false;
+        if ((micros32() - t0) > timeout_us) return false;
       }
 
       // Log fuera del tiempo crítico (opcional) — NO dentro si SPI_DEBUG=0
@@ -329,10 +359,10 @@ namespace DriverSPI {
 
       // DRDY opcional
 
-      // SPI0 esclavo, modo 0
-      spi_init(spi0, 1000*1000);       // freq dummy
-      spi_set_slave(spi0, true);
-      spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+      // en begin()
+      spi_init(spi1, 1000*1000);
+      spi_set_slave(spi1, true);
+      spi_set_format(spi1, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
       // Registrar callback de GPIO con la firma correcta
       gpio_set_irq_enabled_with_callback(PIN.cs, GPIO_IRQ_EDGE_FALL, true, cs_isr);
@@ -351,7 +381,7 @@ namespace DriverSPI {
       // Timer 1 kHz
       add_repeating_timer_us(-1000, timer_cb, nullptr, &g_tim);
 
-      Serial.println("[DriverSPI] listo (SPI0 slave, 1 kHz).");
+      Serial.println("[DriverSPI] listo (SPI1 slave, 1 kHz).");
     }
 
     void end() {
@@ -366,7 +396,7 @@ namespace DriverSPI {
 } // namespace DriverSPI
 // --- Función para inicializar SimpleFOC ---
 // ====== Open-loop: escalas y seguridad ======
-static constexpr float   GEAR_RATIO              = 52.0f;     // 1:52
+static constexpr float   GEAR_RATIO              = 51.0f;     // 1:51
 static constexpr float   MAX_VEL_RAD_S_MOTOR     = 100.0f;    // límite [rad/s] eje motor
 static constexpr float   RAMP_RAD_S2             = 800.0f;    // rampa [rad/s^2]
 static constexpr float   DEADBAND_RAD_S          = 0.5f;      // zona muerta cerca de 0
@@ -432,8 +462,17 @@ void initSimpleFOC() {
 
   Serial.println("Motor con FOC inicializado!");
 }
-
-
+static inline void hard_stop_driver() {
+  motor.move(0.0f);                 // PWM a cero
+  digitalWrite(EN1, LOW);
+  digitalWrite(EN2, LOW);
+  digitalWrite(EN3, LOW);
+}
+static inline void enable_driver_if_safe() {
+  digitalWrite(EN1, HIGH);
+  digitalWrite(EN2, HIGH);
+  digitalWrite(EN3, HIGH);
+}
 // --- Función para mover el motor en velocidad ---
 void MotorVelMove(float vel) {
   motor.loopFOC();
@@ -487,7 +526,7 @@ void setup() {
   Wire1.setSDA(14);
   Wire1.setSCL(15);
   Wire1.begin();  
-  mpu.begin();     
+  // mpu.begin();     
   encoder_i2c.begin();
 
   // --- SPI: remapear MISO a GPIO12 para no chocar con LED_PIN=16 ---
@@ -580,6 +619,9 @@ void loop() {
   uint8_t  seq   = 0;
   uint32_t age_us = 0xFFFFFFFF;
   bool have_cmd = DriverSPI::copyLastCmd(cmd, seq, age_us);
+// condiciones de seguridad
+  bool cmd_fresh   = have_cmd && (age_us/1000u) <= FAILSAFE_MS;   // 50 ms
+  bool estop_latch = DriverSPI::g_estop_latched;
 
   float target_motor = 0.0f; // [rad/s] en eje del motor
   if (!oc_active && have_cmd && (age_us/1000u) <= FAILSAFE_MS) {
@@ -594,7 +636,11 @@ void loop() {
     motor.move(0.0f);
     digitalWrite(EN1, LOW); digitalWrite(EN2, LOW); digitalWrite(EN3, LOW);
   } else {
-    digitalWrite(EN1, HIGH); digitalWrite(EN2, HIGH); digitalWrite(EN3, HIGH);
+    // 4) Normal: aplica rampa y mueve
+    target_motor = compute_motor_vel_from_cmd(cmd);   // [rad/s] eje motor
+    g_target_vel_motor = apply_slew(target_motor, g_target_vel_motor, dt);
+
+    enable_driver_if_safe();
     motor.loopFOC();
     motor.move(g_target_vel_motor);
   }
