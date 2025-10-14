@@ -17,8 +17,8 @@ void setup() {
     cfg.limits.I_max      = 6.0f;
     cfg.slew_per_tick     = 0.08f;         // rampa
     Aquiles::Detection::begin(cfg);
-    Aquiles::UARTBus::init();
-    Aquiles::UARTBus::startTasks();   
+    Aquiles::UARTDual::init();
+    Aquiles::UARTDual::startTasks();
     Aquiles::Power::init();
 }
 

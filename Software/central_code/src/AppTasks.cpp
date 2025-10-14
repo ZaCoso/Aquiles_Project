@@ -315,234 +315,257 @@ namespace Aquiles {
         }
     }
 
-    namespace UARTBus {
+    namespace UARTDual {
 
-      // =================== CONFIG UART ===================
-      // Ajustá pines a tu ESP32-S3 si difieren
-      static constexpr int UART_TX   = 17;
-      static constexpr int UART_RX   = 18;
-      static constexpr uint32_t UART_BAUD = 2000000; // 2 Mbps
+    // =================== CONFIG GLOBAL ===================
+    static constexpr uint32_t UART_BAUD = 2000000; // 2 Mbps
 
-      HardwareSerial& UART = Serial1;
+    // ---- Enlace L (Serial1) ----
+    static constexpr int L_TX = 5;
+    static constexpr int L_RX = 6;
 
-      // =================== Protocolo (idéntico a SPI) ===================
-      static constexpr uint8_t PROTO_VERSION = 0x01;
-      static constexpr uint8_t ACT_SOF       = 0x5A;
-      static constexpr uint8_t TEL_SOF       = 0xA5;
-      static constexpr size_t  ACT_SIZE      = 16;
-      static constexpr size_t  TEL_SIZE      = 36;
-      static constexpr uint8_t TEL_LEN_FIELD = 35;
+    // ---- Enlace R (Serial2) ----
+    static constexpr int R_TX = 7;
+    static constexpr int R_RX = 15;
 
-      // SLIP
-      static constexpr uint8_t SLIP_END     = 0xC0;
-      static constexpr uint8_t SLIP_ESC     = 0xDB;
-      static constexpr uint8_t SLIP_ESC_END = 0xDC;
-      static constexpr uint8_t SLIP_ESC_ESC = 0xDD;
+    HardwareSerial& U_L = Serial1;
+    HardwareSerial& U_R = Serial2;
 
-      #pragma pack(push,1)
-      struct ActuationCmdV1 {
-        uint8_t  sof, version, len, seq;
-        uint8_t  mode, rsv0;
-        int16_t  tgt_q15, kp_q15, kd_q15;
-        uint16_t limits;
-        uint8_t  rsv1, crc8;
-      };
-      struct TelemetryFrameV1 {
-        uint8_t  sof, version, len, seq;
-        uint32_t t_us;
-        uint16_t flags, sample_hz;
-        int16_t  enc_q15;
-        int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
-        int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
-        uint16_t err_code, frame_ctr;
-        uint8_t  reserved[5], crc8;
-      };
-      #pragma pack(pop)
+    // =================== Protocolo (idéntico a SPI) ===================
+    static constexpr uint8_t PROTO_VERSION = 0x01;
+    static constexpr uint8_t ACT_SOF       = 0x5A;
+    static constexpr uint8_t TEL_SOF       = 0xA5;
+    static constexpr size_t  ACT_SIZE      = 16;
+    static constexpr size_t  TEL_SIZE      = 36;
+    static constexpr uint8_t TEL_LEN_FIELD = 35;
 
-      // ===== Utilitarios compatibles =====
-      uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init){
-        uint8_t crc = init;
-        for(size_t i=0;i<len;++i){
-          crc ^= data[i];
-          for(uint8_t k=0;k<8;++k)
-            crc = (crc & 0x80) ? (uint8_t)((crc<<1) ^ 0x07) : (uint8_t)(crc<<1);
+    // SLIP
+    static constexpr uint8_t SLIP_END     = 0xC0;
+    static constexpr uint8_t SLIP_ESC     = 0xDB;
+    static constexpr uint8_t SLIP_ESC_END = 0xDC;
+    static constexpr uint8_t SLIP_ESC_ESC = 0xDD;
+
+    #pragma pack(push,1)
+    struct ActuationCmdV1 {
+      uint8_t  sof, version, len, seq;
+      uint8_t  mode, rsv0;
+      int16_t  tgt_q15, kp_q15, kd_q15;
+      uint16_t limits;
+      uint8_t  rsv1, crc8; // rsv1 sin uso en modo dual-bus
+    };
+    struct TelemetryFrameV1 {
+      uint8_t  sof, version, len, seq;
+      uint32_t t_us;
+      uint16_t flags, sample_hz;
+      int16_t  enc_q15;
+      int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
+      int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
+      uint16_t err_code, frame_ctr;
+      uint8_t  reserved[5], crc8; // reserved[0] sin uso en modo dual-bus
+    };
+    #pragma pack(pop)
+
+    // ===== Utilitarios =====
+    static uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init){
+      uint8_t crc = init;
+      for (size_t i = 0; i < len; ++i) {
+        crc ^= data[i];
+        for (uint8_t k = 0; k < 8; ++k)
+          crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+      }
+      return crc;
+    }
+    static float   q15_to_rad(int16_t q){ return (float)q * 2.0f * (float)M_PI / 32768.0f; }
+    static float   q14_to_g  (int16_t q){ return (float)q / 16384.0f; }
+    static int16_t vel_to_q15(float vel_rad_s){ return (int16_t)lrintf(vel_rad_s * 2048.0f); }
+
+    static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s){
+      memset(&c, 0, sizeof(c));
+      c.sof = ACT_SOF;  c.version = PROTO_VERSION;  c.len = ACT_SIZE - 1;
+      c.seq = seq;
+      c.mode = 2; // VELOCITY
+      c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s);   
+      c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1, 0x00);
+    }
+    static bool validateTelemetry(const TelemetryFrameV1& f){
+      if (f.sof!=TEL_SOF || f.version!=PROTO_VERSION || f.len!=TEL_LEN_FIELD) return false;
+      uint8_t calc = crc8_sum(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE - 1, 0x00);
+      return (calc == f.crc8);
+    }
+
+    // ==== SLIP helpers ====
+    static void slip_write_byte(HardwareSerial& U, uint8_t b){
+      if (b==SLIP_END){ U.write(SLIP_ESC); U.write(SLIP_ESC_END); }
+      else if (b==SLIP_ESC){ U.write(SLIP_ESC); U.write(SLIP_ESC_ESC); }
+      else U.write(b);
+    }
+    static void slip_write_frame(HardwareSerial& U, const uint8_t* data, size_t n){
+      U.write(SLIP_END);
+      for(size_t i=0;i<n;i++) slip_write_byte(U, data[i]);
+      U.write(SLIP_END);
+    }
+
+    typedef void (*SlipFrameHandler)(uint8_t*, size_t);
+
+    static void slip_feed_byte(uint8_t b, SlipFrameHandler onFrame){
+      // Un parser por tarea RX; lo haremos miembro de un “contexto”
+      // Para permitir dos instancias, vamos a mover esto a un struct.
+    }
+
+    // ====== Contexto reutilizable por bus ======
+    struct LinkCtx {
+      HardwareSerial* U;
+      Aquiles::Detection::Leg leg;     // L o R
+      SemaphoreHandle_t ioMutex;
+      uint8_t seq;
+
+      // RX state (SLIP)
+      static const size_t RX_BUF_MAX = 256;
+      uint8_t  rx_buf[RX_BUF_MAX];
+      size_t   rx_len;
+      bool     rx_in_frame;
+      bool     esc;
+
+      LinkCtx(): U(nullptr), leg(Aquiles::Detection::Leg::L),
+                ioMutex(nullptr), seq(0),
+                rx_len(0), rx_in_frame(false), esc(false) {}
+    };
+
+    // Dos contextos: uno por enlace
+    static LinkCtx CTX_L;
+    static LinkCtx CTX_R;
+
+    static void ctx_slip_feed(LinkCtx& C, uint8_t b, SlipFrameHandler onFrame){
+      if (b == SLIP_END){
+        if (C.rx_in_frame && C.rx_len >= TEL_SIZE){
+          if (onFrame) onFrame(C.rx_buf, C.rx_len);
         }
-        return crc;
+        C.rx_len = 0;
+        C.rx_in_frame = true;
+        C.esc = false;
+        return;
       }
-      float q15_to_rad(int16_t q){ return (float)q * 2.0f * (float)M_PI / 32768.0f; }
-      float q14_to_g  (int16_t q){ return (float)q / 16384.0f; }
-      int16_t amps_to_q15(float a){ return (int16_t)lrintf(a * 1024.0f); }
+      if (!C.rx_in_frame) return;
 
-      inline int16_t vel_to_q15(float vel_rad_s){ return (int16_t)lrintf(vel_rad_s * 2048.0f); }
-      inline float   q15_to_vel(int16_t q)      { return (float)q / 2048.0f; }
-
-      // ===== SLIP TX helpers =====
-      static void slip_write_byte(uint8_t b){
-        if (b==SLIP_END){ UART.write(SLIP_ESC); UART.write(SLIP_ESC_END); }
-        else if (b==SLIP_ESC){ UART.write(SLIP_ESC); UART.write(SLIP_ESC_ESC); }
-        else UART.write(b);
-      }
-      static void slip_write_frame(const uint8_t* data, size_t n){
-        UART.write(SLIP_END);
-        for(size_t i=0;i<n;i++) slip_write_byte(data[i]);
-        UART.write(SLIP_END);
+      if (C.esc){
+        if (b==SLIP_ESC_END) b = SLIP_END;
+        else if (b==SLIP_ESC_ESC) b = SLIP_ESC;
+        C.esc = false;
+      } else if (b == SLIP_ESC){
+        C.esc = true;
+        return;
       }
 
-      // ===== Forward declarations (para orden correcto en C++11) =====
-      typedef void (*SlipFrameHandler)(uint8_t*, size_t);
-      static void slip_feed(uint8_t b, SlipFrameHandler onFrame);
-      static void on_slip_frame(uint8_t* buf, size_t n);  // callback RX
+      if (C.rx_len < LinkCtx::RX_BUF_MAX) C.rx_buf[C.rx_len++] = b;
+    }
 
-      // ===== SLIP RX (única definición; NO dupliques esta función) =====
-      static void slip_feed(uint8_t b, SlipFrameHandler onFrame){
-        static constexpr size_t RX_BUF_MAX = 256;
-        static uint8_t  rx_buf[RX_BUF_MAX];
-        static size_t   rx_len = 0;
-        static bool     rx_in_frame = false;
-        static bool     esc = false;
+    // ===== OC hold =====
+    static constexpr uint16_t FLAG_OC = (1u<<0);
+    #include <esp_timer.h>
+    static inline uint32_t now_ms(){ return (uint32_t)(esp_timer_get_time()/1000ULL); }
+    static uint32_t hold_until_L_ms = 0;
+    static uint32_t hold_until_R_ms = 0;
 
-        if (b == SLIP_END){
-          if (rx_in_frame && rx_len >= TEL_SIZE){
-            if (onFrame) onFrame(rx_buf, rx_len);
-          }
-          rx_len = 0;
-          rx_in_frame = true;
-          esc = false;
-          return;
-        }
-        if (!rx_in_frame) return;
+    static void ingestTelemetry_fixedLeg(const TelemetryFrameV1& f, Aquiles::Detection::Leg leg){
+      Aquiles::Detection::SampleIn s{};
+      s.ts_us       = f.t_us;
+      s.theta_rad   = q15_to_rad(f.enc_q15);
+      s.accel_fwd_g = q14_to_g(f.mpu_ax_q14);
+      s.imu_sat     = (f.flags & (1u<<5)) != 0;
+      Aquiles::Detection::pushSample(leg, s);
 
-        if (esc){
-          if (b==SLIP_ESC_END) b = SLIP_END;
-          else if (b==SLIP_ESC_ESC) b = SLIP_ESC;
-          esc = false;
-        } else if (b == SLIP_ESC){
-          esc = true;
-          return;
-        }
-
-        if (rx_len < RX_BUF_MAX) rx_buf[rx_len++] = b;
+      if (f.flags & FLAG_OC){
+        uint32_t t = now_ms();
+        if (leg==Aquiles::Detection::Leg::L) hold_until_L_ms = t + 200;
+        else                                  hold_until_R_ms = t + 200;
+        Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
       }
+    }
 
-      // ===== Build & validate =====
-      static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s){
-        memset(&c, 0, sizeof(c));
-        c.sof = ACT_SOF;  c.version = PROTO_VERSION;  c.len = ACT_SIZE - 1;
-        c.seq = seq;
-        c.mode = 2; // VELOCITY
-        c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s);
-        c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1);
-      }
-      static bool validateTelemetry(const TelemetryFrameV1& f){
-        if (f.sof!=TEL_SOF || f.version!=PROTO_VERSION || f.len!=TEL_LEN_FIELD) return false;
-        uint8_t calc = crc8_sum(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE - 1);
-        return (calc == f.crc8);
-      }
+    static void on_slip_frame_L(uint8_t* buf, size_t n){
+      if (n != TEL_SIZE) return;
+      TelemetryFrameV1 f; memcpy(&f, buf, TEL_SIZE);
+      if (!validateTelemetry(f)) return;
+      ingestTelemetry_fixedLeg(f, Aquiles::Detection::Leg::L);
+    }
+    static void on_slip_frame_R(uint8_t* buf, size_t n){
+      if (n != TEL_SIZE) return;
+      TelemetryFrameV1 f; memcpy(&f, buf, TEL_SIZE);
+      if (!validateTelemetry(f)) return;
+      ingestTelemetry_fixedLeg(f, Aquiles::Detection::Leg::R);
+    }
 
-      // ===== OC hold y helpers =====
-      static constexpr uint16_t FLAG_OC = (1u << 0);
-      #include <esp_timer.h>
-      static inline uint32_t now_ms(){ return (uint32_t)(esp_timer_get_time()/1000ULL); }
-      static uint32_t hold_until_L_ms = 0;
-      static uint32_t hold_until_R_ms = 0;
-
-      static inline Aquiles::Detection::Leg leg_from_reserved(uint8_t id){
-        return (id==0) ? Detection::Leg::L : Detection::Leg::R;
-      }
-
-      static void ingestTelemetry(const TelemetryFrameV1& f, Aquiles::Detection::Leg leg){
-        Detection::SampleIn s{};
-        s.ts_us       = f.t_us;
-        s.theta_rad   = q15_to_rad(f.enc_q15);
-        s.accel_fwd_g = q14_to_g(f.mpu_ax_q14);
-        s.imu_sat     = (f.flags & (1u<<5)) != 0;
-        Detection::pushSample(leg, s);
-
-        if (f.flags & FLAG_OC){
-          uint32_t t = now_ms();
-          if (leg==Detection::Leg::L) hold_until_L_ms = t + 200;
-          else                        hold_until_R_ms = t + 200;
-          Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
+    // ===== Tasks =====
+    static void vTxTask(void* pv){
+      LinkCtx* C = static_cast<LinkCtx*>(pv);
+      TickType_t last = xTaskGetTickCount();
+      for(;;){
+        if (Aquiles::Safety::triggered()){
+          Serial.println("[UARTDual] E-STOP: deteniendo TX.");
+          vTaskDelete(nullptr);
         }
 
-        static uint32_t lastLog = 0;
-        uint32_t now = millis();
-        if (now - lastLog > 500){
-          lastLog = now;
-          Serial.printf("[UART] seq=%u frame=%u enc_q15=%d flags=0x%04X res=[%u,%u,%u,%u,%u]\n",
-            f.seq, f.frame_ctr, f.enc_q15, f.flags,
-            f.reserved[0], f.reserved[1], f.reserved[2], f.reserved[3], f.reserved[4]);
+        using Aquiles::Detection::Leg;
+        auto cmd = Aquiles::Detection::getCmd(C->leg);
+
+        uint32_t t = now_ms();
+        if (C->leg == Leg::L && t < hold_until_L_ms) cmd.setpoint = 0.0f;
+        if (C->leg == Leg::R && t < hold_until_R_ms) cmd.setpoint = 0.0f;
+
+        ActuationCmdV1 c{};
+        uint8_t seq = ++C->seq;
+        buildActCmd(c, seq, cmd.setpoint);
+
+        if (C->ioMutex) xSemaphoreTake(C->ioMutex, portMAX_DELAY);
+        slip_write_frame(*C->U, reinterpret_cast<uint8_t*>(&c), ACT_SIZE);
+        if (C->ioMutex) xSemaphoreGive(C->ioMutex);
+
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
+      }
+    }
+
+    static void vRxTask(void* pv){
+      LinkCtx* C = static_cast<LinkCtx*>(pv);
+      SlipFrameHandler cb = (C->leg == Aquiles::Detection::Leg::L) ? &on_slip_frame_L : &on_slip_frame_R;
+      for(;;){
+        while (C->U->available()){
+          uint8_t b = (uint8_t)C->U->read();
+          ctx_slip_feed(*C, b, cb);
         }
+        vTaskDelay(pdMS_TO_TICKS(1));
       }
+    }
 
-      // ===== Callback RX concreto (declarado arriba) =====
-      static void on_slip_frame(uint8_t* buf, size_t n){
-        if (n != TEL_SIZE) return;
-        TelemetryFrameV1 f;
-        memcpy(&f, buf, TEL_SIZE);
-        if (!validateTelemetry(f)) return;
-        auto leg = leg_from_reserved(f.reserved[0]); // 0=L, 1=R (set por RP2040)
-        ingestTelemetry(f, leg);
-      }
+    // ===== API =====
+    void init(){
+      // Contexto Left
+      CTX_L.U = &U_L;
+      CTX_L.leg = Aquiles::Detection::Leg::L;
+      if (!CTX_L.ioMutex) CTX_L.ioMutex = xSemaphoreCreateMutex();
 
-      // ===== Tareas =====
-      static SemaphoreHandle_t ioMutex = nullptr;
-      static uint8_t g_seq = 0;
+      // Contexto Right
+      CTX_R.U = &U_R;
+      CTX_R.leg = Aquiles::Detection::Leg::R;
+      if (!CTX_R.ioMutex) CTX_R.ioMutex = xSemaphoreCreateMutex();
 
-      static void vUartTxTask(void*){
-        TickType_t last = xTaskGetTickCount();
-        for(;;){
-          if (Aquiles::Safety::triggered()){
-            Serial.println("[UART] E-STOP: deteniendo TX.");
-            vTaskDelete(nullptr);
-          }
-          using Aquiles::Detection::Leg;
-          auto cmdL = Aquiles::Detection::getCmd(Leg::L);
-          auto cmdR = Aquiles::Detection::getCmd(Leg::R);
+      // Begin UARTs
+      U_L.begin(UART_BAUD, SERIAL_8N1, L_RX, L_TX);
+      U_R.begin(UART_BAUD, SERIAL_8N1, R_RX, R_TX);
 
-          uint32_t t = now_ms();
-          if (t < hold_until_L_ms) cmdL.setpoint = 0.0f;
-          if (t < hold_until_R_ms) cmdR.setpoint = 0.0f;
+      Serial.printf("[UARTDual] L: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, L_TX, L_RX);
+      Serial.printf("[UARTDual] R: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, R_TX, R_RX);
+    }
 
-          ActuationCmdV1 cL{}, cR{};
-          uint8_t seq = ++g_seq;
-          buildActCmd(cL, seq, cmdL.setpoint);
-          buildActCmd(cR, seq, cmdR.setpoint);
+    void startTasks(){
+      // L
+      xTaskCreatePinnedToCore(vTxTask, "UartTX_L", 4096, &CTX_L, 5, nullptr, 1);
+      xTaskCreatePinnedToCore(vRxTask, "UartRX_L", 4096, &CTX_L, 6, nullptr, 1);
+      // R
+      xTaskCreatePinnedToCore(vTxTask, "UartTX_R", 4096, &CTX_R, 5, nullptr, 1);
+      xTaskCreatePinnedToCore(vRxTask, "UartRX_R", 4096, &CTX_R, 6, nullptr, 1);
+    }
 
-          if (ioMutex) xSemaphoreTake(ioMutex, portMAX_DELAY);
-          slip_write_frame(reinterpret_cast<uint8_t*>(&cL), ACT_SIZE);
-          slip_write_frame(reinterpret_cast<uint8_t*>(&cR), ACT_SIZE);
-          if (ioMutex) xSemaphoreGive(ioMutex);
-
-          vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
-        }
-      }
-
-      static void vUartRxTask(void*){
-        for(;;){
-          while (UART.available()){
-            uint8_t b = (uint8_t)UART.read();
-            slip_feed(b, &on_slip_frame); // puntero de función (C++11)
-          }
-          vTaskDelay(pdMS_TO_TICKS(1));
-        }
-      }
-
-      // ===== API =====
-      void init(){
-        if (!ioMutex) ioMutex = xSemaphoreCreateMutex();
-        UART.begin(UART_BAUD, SERIAL_8N1, UART_RX, UART_TX);
-        Serial.printf("[UARTBus] Serial1 @ %u bps (TX=%d RX=%d)\n",
-                      (unsigned)UART_BAUD, UART_TX, UART_RX);
-      }
-      void startTasks(){
-        xTaskCreatePinnedToCore(vUartTxTask, "UartTX", 4096, nullptr, 5, nullptr, 1);
-        xTaskCreatePinnedToCore(vUartRxTask, "UartRX", 4096, nullptr, 6, nullptr, 1);
-      }
-
-    } // namespace UARTBus
-
-  
+    } // namespace UARTDual
     namespace Safety {
         constexpr int PIN_ESTOP = 8;          // ajustá a tu botón
         static volatile bool g_estop = false;

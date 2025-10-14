@@ -145,16 +145,9 @@ namespace Aquiles {
         void TaskNotify(void* pv);
     }
 
-    namespace UARTBus {
-    // ===== Inicialización y tareas =====
-    void init();          // Configura Serial1, pines, mutex, etc.
-    void startTasks();    // Crea las tareas TX (1 kHz) y RX (parser SLIP)
-
-    // ===== Utilitarios (compat) =====
-    uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init = 0x00);
-    float   q15_to_rad(int16_t q);
-    float   q14_to_g(int16_t q);
-    int16_t amps_to_q15(float a);
+    namespace UARTDual {
+    void init();        // configura Serial1 (L) y Serial2 (R)
+    void startTasks();  // crea TX/RX para L y para R
     }
 
     namespace Tasks {
