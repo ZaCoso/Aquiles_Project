@@ -55,7 +55,7 @@ namespace DriverUART {
   static constexpr uint     UART_RX_PIN = 13;        // GP13 = UART0 RX
   #define UART_ID uart0
 
-  static constexpr uint8_t  PROTO_VERSION  = 0x01;
+
   static constexpr uint8_t  ACT_SOF        = 0x5A;
   static constexpr uint8_t  TEL_SOF        = 0xA5;
   static constexpr size_t   ACT_SIZE       = 16;
@@ -65,8 +65,9 @@ namespace DriverUART {
 
   static volatile bool g_inited = false;
 
-  // ===================== Estructuras de frame =====================
+  static constexpr uint8_t  PROTO_VERSION_V2 = 0x02; // la nueva compacta
   #pragma pack(push,1)
+// --- Comando (igual que antes) ---
   struct ActuationCmdV1 {
     uint8_t  sof, version, len, seq;
     uint8_t  mode, rsv0;
@@ -74,21 +75,27 @@ namespace DriverUART {
     uint16_t limits;
     uint8_t  rsv1, crc8;
   };
-  struct TelemetryFrameV1 {
-    uint8_t  sof, version, len, seq;
-    uint32_t t_us;
-    uint16_t flags, sample_hz;
-    int16_t  enc_q15;
-    int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
-    int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
-    uint16_t err_code, frame_ctr;
-    uint8_t  reserved[5], crc8;
+  struct TelemetryFrameV2 {
+    uint8_t  sof;        // 0xA5
+    uint8_t  version;    // 0x02
+    uint8_t  len;        // = sizeof(TelemetryFrameV2)-1
+    uint8_t  seq;
+    uint32_t t_us;       // timestamp
+    uint16_t flags;      // bit0=OC, etc.
+    int16_t  enc_q15;    // ángulo encoder
+    int16_t  ipeak_q15;  // pico de corriente*1024
+    uint8_t  phase_peak; // 0..2
+    uint16_t frame_ctr;
+    uint8_t  crc8;
   };
   #pragma pack(pop)
 
+  static constexpr size_t TEL2_SIZE      = sizeof(TelemetryFrameV2);   // 20
+  static constexpr uint8_t TEL2_LEN      = TEL2_SIZE - 1;
+
   // ===================== Buffers y estado =====================
   static repeating_timer_t g_tim;
-  static volatile TelemetryFrameV1 g_tx_buf[2];
+  static volatile TelemetryFrameV2 g_tx_buf[2];
   static volatile uint8_t  g_idx_wr = 0;
   static volatile uint8_t  g_idx_rd = 1;
   static volatile uint32_t g_frame_ctr = 0;
@@ -152,35 +159,30 @@ namespace DriverUART {
   }
 
   // ===================== Telemetría =====================
-  static void fillTelemetry(TelemetryFrameV1& f){
+  static void fillTelemetryV2(TelemetryFrameV2& f){
     SensorSnap s{};
     uint32_t irq = save_and_disable_interrupts();
     memcpy(&s, (const void*)&g_snap, sizeof(SensorSnap));
     restore_interrupts(irq);
 
-    f.sof = TEL_SOF;
-    f.version = PROTO_VERSION;
-    f.len = TEL_LEN_FIELD;
-    f.seq = g_seq;
-    f.t_us = micros32();
-    f.flags = s.overcurrent ? FLAG_OC : 0;
-    f.sample_hz = 1000;
-    f.enc_q15 = rad_to_q15(s.enc_rad);
-    f.err_code = 0;
-    f.frame_ctr = (uint16_t)(g_frame_ctr & 0xFFFF);
-    int16_t ipeak_q15 = (int16_t)lrintf(s.i_peak * 1024.0f);
-    f.reserved[0] = (uint8_t)(ipeak_q15 & 0xFF);
-    f.reserved[1] = (uint8_t)((ipeak_q15 >> 8) & 0xFF);
-    f.reserved[2] = (uint8_t)((s.overcurrent?0x80:0x00)|(s.phase_peak&0x03));
-    f.reserved[3] = f.reserved[4] = 0;
-    f.crc8 = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE-1, 0x00);
+    f.sof      = TEL_SOF;
+    f.version  = PROTO_VERSION_V2;
+    f.len      = TEL2_LEN;
+    f.seq      = g_seq;
+    f.t_us     = micros32();
+    f.flags    = s.overcurrent ? FLAG_OC : 0;
+    f.enc_q15  = rad_to_q15(s.enc_rad);
+    f.ipeak_q15= (int16_t)lrintf(s.i_peak * 1024.0f);
+    f.phase_peak = s.phase_peak;
+    f.frame_ctr= (uint16_t)(g_frame_ctr & 0xFFFF);
+    f.crc8     = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL2_SIZE-1, 0x00);
   }
 
   static bool timer_cb(repeating_timer_t*){
-    TelemetryFrameV1 w{};
-    fillTelemetry(w);
+    TelemetryFrameV2 w{};
+    fillTelemetryV2(w);
     uint32_t irq = save_and_disable_interrupts();
-    memcpy((void*)&g_tx_buf[g_idx_wr], &w, sizeof(TelemetryFrameV1));
+    memcpy((void*)&g_tx_buf[g_idx_wr], &w, sizeof(TelemetryFrameV2));
     uint8_t old_rd = g_idx_rd;
     g_idx_rd = g_idx_wr;
     g_idx_wr = old_rd;
@@ -206,9 +208,9 @@ namespace DriverUART {
     adc_gpio_init(27);
     adc_gpio_init(28);
 
-    TelemetryFrameV1 z{}; fillTelemetry(z);
-    memcpy((void*)&g_tx_buf[0], &z, sizeof(TelemetryFrameV1));
-    memcpy((void*)&g_tx_buf[1], &z, sizeof(TelemetryFrameV1));
+    TelemetryFrameV2 z{}; fillTelemetryV2(z);
+    memcpy((void*)&g_tx_buf[0], &z, sizeof(TelemetryFrameV2));
+    memcpy((void*)&g_tx_buf[1], &z, sizeof(TelemetryFrameV2));
 
     add_repeating_timer_us(-1000, timer_cb, nullptr, &g_tim);
     Serial.println("[DriverUART] listo (UART0 GP12/GP13, 2Mbps).");
@@ -220,9 +222,9 @@ namespace DriverUART {
       slip_feed(b);
     }
 
-    TelemetryFrameV1 snap{};
+    TelemetryFrameV2 snap{};
     uint32_t irq = save_and_disable_interrupts();
-    memcpy(&snap, (const void*)&g_tx_buf[g_idx_rd], sizeof(TelemetryFrameV1));
+    memcpy(&snap, (const void*)&g_tx_buf[g_idx_rd], sizeof(TelemetryFrameV2));
     restore_interrupts(irq);
     slip_write_frame(reinterpret_cast<const uint8_t*>(&snap), TEL_SIZE);
   }
@@ -241,7 +243,7 @@ namespace DriverUART {
     uint32_t age = micros32() - g_last_cmd_us;
     restore_interrupts(irq);
     out = tmp; seq_out = sq; age_us_out = age;
-    bool ok = (out.sof==ACT_SOF && out.version==PROTO_VERSION && out.len==(ACT_SIZE-1));
+    bool ok = (out.sof==ACT_SOF && out.version==PROTO_VERSION_V2 && out.len==(ACT_SIZE-1));
     return ok;
   }
 
