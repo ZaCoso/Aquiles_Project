@@ -3,9 +3,8 @@
 #define Wire Wire1  
 #include <AS5600.h>
 
-#include <Adafruit_MPU6050.h>
 #include <Adafruit_NeoPixel.h>
-#include <Adafruit_Sensor.h>
+
 #include <SimpleFOC.h>
 #include "pico/stdlib.h"
 #include "hardware/irq.h"
@@ -30,7 +29,7 @@ Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 AS5600 encoder_i2c;    
 
-Adafruit_MPU6050 mpu;
+
 
 // --- Definición de hardware ---
 BLDCMotor motor = BLDCMotor(7);                  // Motor con 7 pares de polos
@@ -101,8 +100,6 @@ namespace DriverUART {
   // ===================== Sensor snapshot =====================
   struct SensorSnap {
     float enc_rad;                 
-    float ax_g, ay_g, az_g;
-    float gx_rads, gy_rads, gz_rads;
     float iA, iB, iC;
     float i_peak;
     uint8_t phase_peak;
@@ -169,12 +166,6 @@ namespace DriverUART {
     f.flags = s.overcurrent ? FLAG_OC : 0;
     f.sample_hz = 1000;
     f.enc_q15 = rad_to_q15(s.enc_rad);
-    f.mpu_ax_q14 = g_to_q14(s.ax_g);
-    f.mpu_ay_q14 = g_to_q14(s.ay_g);
-    f.mpu_az_q14 = g_to_q14(s.az_g);
-    f.mpu_gx_q14 = gyro_to_q15(s.gx_rads, 4.3633f);
-    f.mpu_gy_q14 = gyro_to_q15(s.gy_rads, 4.3633f);
-    f.mpu_gz_q14 = gyro_to_q15(s.gz_rads, 4.3633f);
     f.err_code = 0;
     f.frame_ctr = (uint16_t)(g_frame_ctr & 0xFFFF);
     int16_t ipeak_q15 = (int16_t)lrintf(s.i_peak * 1024.0f);
@@ -258,15 +249,6 @@ namespace DriverUART {
   static inline float read_encoder_rad_noprint(){
     uint16_t raw = encoder_i2c.readAngle(); // 0..4095
     return (raw * (2.0f*M_PI)) / 4096.0f;
-  }
-
-  static inline void sample_mpu(float& ax_g, float& ay_g, float& az_g,
-                                float& gx, float& gy, float& gz){
-    sensors_event_t a,g,t;
-    mpu.getEvent(&a,&g,&t);
-    const float g0=9.80665f;
-    ax_g=a.acceleration.x/g0; ay_g=a.acceleration.y/g0; az_g=a.acceleration.z/g0;
-    gx=g.gyro.x; gy=g.gyro.y; gz=g.gyro.z;
   }
 
   struct PhaseCal { float gain_VperA; float offset_V; int adc_ch; };
@@ -377,31 +359,6 @@ void MotorVelMove(float vel) {
 }
 
 
-// --- Función para leer y mostrar datos ---
-std::vector<float> readMPU6050() {
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-
-  Serial.print("Aceleración [m/s^2] X:");
-  Serial.print(a.acceleration.x);
-  Serial.print(" Y:");
-  Serial.print(a.acceleration.y);
-  Serial.print(" Z:");
-  Serial.println(a.acceleration.z);
-
-  Serial.print("Giroscopio [rad/s] X:");
-  Serial.print(g.gyro.x);
-  Serial.print(" Y:");
-  Serial.print(g.gyro.y);
-  Serial.print(" Z:");
-  Serial.println(g.gyro.z);
-  float gravity = 9.80665f;
-  return {a.acceleration.x/gravity, 
-    a.acceleration.y/gravity, 
-    a.acceleration.z/gravity , 
-    g.gyro.x, g.gyro.y, g.gyro.z};
-}
-
 float encoder_5600(){
   uint16_t raw = encoder_i2c.readAngle();       // 0–4095
   float grados = raw * 360.0 / 4096;  // Conversión a grados
@@ -423,7 +380,7 @@ void setup() {
   Wire1.setSDA(14);
   Wire1.setSCL(15);
   Wire1.begin();  
-  // mpu.begin();     
+
   encoder_i2c.begin();
 
   DriverUART::begin();
@@ -456,18 +413,20 @@ void loop() {
   float dt = (now_us - last_us) * 1e-6f;
   last_us = now_us;
 
-  // 3) Sensores cada ~2 ms
+  // 3) Sens ores cada ~2 ms
   static uint32_t last_sense_us = 0;
   if (now_us - last_sense_us >= 2000) {
     last_sense_us = now_us;
 
     DriverUART::SensorSnap s{};
+
     // Encoder (sin prints)
-    s.enc_rad = DriverUART::read_encoder_rad_noprint(); // ← reusa tu helper existente
-    // IMU
-    DriverUART::sample_mpu(s.ax_g, s.ay_g, s.az_g, s.gx_rads, s.gy_rads, s.gz_rads);
+    s.enc_rad = DriverUART::read_encoder_rad_noprint();
+
     // Corrientes
-    DriverUART ::read_currents_3ph(s.iA, s.iB, s.iC);
+    DriverUART::read_currents_3ph(s.iA, s.iB, s.iC);
+
+    // Pico y fase
     float aA=fabsf(s.iA), aB=fabsf(s.iB), aC=fabsf(s.iC);
     s.i_peak = aA; s.phase_peak = 0;
     if (aB > s.i_peak) { s.i_peak = aB; s.phase_peak = 1; }
@@ -479,9 +438,10 @@ void loop() {
     uint32_t now_ms = now_us / 1000u;
     if (s.i_peak > I_HW_TRIP_A) DriverUART::g_oc_hold_until_ms = now_ms + HW_TRIP_HOLD_MS;
     s.overcurrent = (now_ms < DriverUART::g_oc_hold_until_ms);
+
     s.t_us = now_us;
 
-    // Publicar snapshot para telemetría (atómico)
+    // Publicar snapshot (atómico)
     uint32_t irq = save_and_disable_interrupts();
     memcpy((void*)&DriverUART::g_snap, &s, sizeof(DriverUART::SensorSnap));
     restore_interrupts(irq);
