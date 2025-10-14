@@ -111,39 +111,51 @@ namespace Aquiles {
           // LEFT
           SampleIn inL;
           if (xQueueReceive(qInL, &inL, 0)==pdTRUE){
+            // timestamp seguro
             uint32_t ts = inL.ts_us ? inL.ts_us : micros32();
-            float th = unwrap(inL.theta_rad, thL_prev);
-            float dt = (tsL_prev==0) ? 0.001f : (float)(ts - tsL_prev)/1e6f;  // s
-            if (dt <= 0) dt = 1e-3f;
-            float w  = (th - thL_prev)/dt;
 
-            SIG_L.theta   = th;
-            SIG_L.omega   = w;
-            SIG_L.a_fwd_g = inL.accel_fwd_g;
-            SIG_L.coh_ok  = !inL.imu_sat;      // placeholder
-            SIG_L.rx_us   = ts;
+            // Si viene un ángulo, actualizamos theta/omega
+            if (!isnan(inL.theta_rad)){
+              float th = unwrap(inL.theta_rad, thL_prev);
+              float dt = (tsL_prev==0) ? 0.001f : (float)(ts - tsL_prev)/1e6f;
+              if (dt <= 0) dt = 1e-3f;
+              float w  = (th - thL_prev)/dt;
 
-            thL_prev = th; tsL_prev = ts;
+              SIG_L.theta = th;
+              SIG_L.omega = w;
+              thL_prev = th; tsL_prev = ts;
+            }
+
+            // Si viene aceleración, la actualizamos
+            if (!isnan(inL.accel_fwd_g)) SIG_L.a_fwd_g = inL.accel_fwd_g;
+
+            // Si viene flag de saturación IMU, actualizamos
+            if (inL.imu_sat) SIG_L.coh_ok = false;
+
+            SIG_L.rx_us = ts;
           }
 
           // RIGHT
           SampleIn inR;
           if (xQueueReceive(qInR, &inR, 0)==pdTRUE){
             uint32_t ts = inR.ts_us ? inR.ts_us : micros32();
-            float th = unwrap(inR.theta_rad, thR_prev);
-            float dt = (tsR_prev==0) ? 0.001f : (float)(ts - tsR_prev)/1e6f;
-            if (dt <= 0) dt = 1e-3f;
-            float w  = (th - thR_prev)/dt;
 
-            SIG_R.theta   = th;
-            SIG_R.omega   = w;
-            SIG_R.a_fwd_g = inR.accel_fwd_g;
-            SIG_R.coh_ok  = !inR.imu_sat;
-            SIG_R.rx_us   = ts;
+            if (!isnan(inR.theta_rad)){
+              float th = unwrap(inR.theta_rad, thR_prev);
+              float dt = (tsR_prev==0) ? 0.001f : (float)(ts - tsR_prev)/1e6f;
+              if (dt <= 0) dt = 1e-3f;
+              float w  = (th - thR_prev)/dt;
 
-            thR_prev = th; tsR_prev = ts;
+              SIG_R.theta = th;
+              SIG_R.omega = w;
+              thR_prev = th; tsR_prev = ts;
+            }
+
+            if (!isnan(inR.accel_fwd_g)) SIG_R.a_fwd_g = inR.accel_fwd_g;
+            if (inR.imu_sat) SIG_R.coh_ok = false;
+
+            SIG_R.rx_us = ts;
           }
-
           vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.fusion_period_ms));
         }
       }
@@ -315,204 +327,263 @@ namespace Aquiles {
         }
     }
 
-    // ================= SPI BUS =================
-    namespace SPIBus {  
-        using Detection::Leg;
-        // --- Overcurrent flag enviado por el RP2040 ---
-        static constexpr uint16_t FLAG_OC = (1u << 0);
+    namespace UARTDual {
 
-        // --- Hold local: cuánto tiempo mantener setpoint=0 tras OC ---
-        static uint32_t hold_until_L_ms = 0;
-        static uint32_t hold_until_R_ms = 0;
+    // =================== CONFIG GLOBAL ===================
+    static constexpr uint32_t UART_BAUD = 2000000; // 2 Mbps
 
-        // Helper de tiempo en milisegundos
-        #include <esp_timer.h>
-        static inline uint32_t now_ms() {
-          return (uint32_t)(esp_timer_get_time() / 1000ULL);
+    // ---- Enlace L (Serial1) ----
+    static constexpr int L_TX = 5;
+    static constexpr int L_RX = 6;
+
+    // ---- Enlace R (Serial2) ----
+    static constexpr int R_TX = 7;
+    static constexpr int R_RX = 15;
+
+    HardwareSerial& U_L = Serial1;
+    HardwareSerial& U_R = Serial2;
+
+    // =================== Protocolo (idéntico a SPI) ===================
+    static constexpr uint8_t PROTO_VERSION_V2 = 0x02; // telemetría nueva (20B
+    static constexpr uint8_t ACT_SOF       = 0x5A;
+    static constexpr uint8_t TEL_SOF       = 0xA5;
+    static constexpr size_t  ACT_SIZE      = 16;
+    static constexpr size_t  TEL_SIZE      = 36;
+    static constexpr uint8_t TEL_LEN_FIELD = 35;
+
+    // SLIP
+    static constexpr uint8_t SLIP_END     = 0xC0;
+    static constexpr uint8_t SLIP_ESC     = 0xDB;
+    static constexpr uint8_t SLIP_ESC_END = 0xDC;
+    static constexpr uint8_t SLIP_ESC_ESC = 0xDD;
+
+    #pragma pack(push,1)
+    struct ActuationCmdV1 {
+      uint8_t  sof, version, len, seq;
+      uint8_t  mode, rsv0;
+      int16_t  tgt_q15, kp_q15, kd_q15;
+      uint16_t limits;
+      uint8_t  rsv1, crc8; // rsv1 sin uso en modo dual-bus
+    };
+
+    struct TelemetryFrameV2 {
+      uint8_t  sof, version, len, seq;
+      uint32_t t_us;
+      uint16_t flags, sample_hz;
+      int16_t  enc_q15;
+      int16_t  ipeak_q15;
+      uint8_t  phase_peak;
+      uint16_t frame_ctr;
+      uint8_t  crc8;
+    };
+    #pragma pack(pop)
+
+    static constexpr size_t TEL2_SIZE      = sizeof(TelemetryFrameV2); // 20
+    static constexpr uint8_t TEL2_LEN      = TEL2_SIZE - 1;
+        // ===== Utilitarios =====
+    static uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init){
+      uint8_t crc = init;
+      for (size_t i = 0; i < len; ++i) {
+        crc ^= data[i];
+        for (uint8_t k = 0; k < 8; ++k)
+          crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+      }
+      return crc;
+    }
+    static float   q15_to_rad(int16_t q){ return (float)q * 2.0f * (float)M_PI / 32768.0f; }
+    static float   q14_to_g  (int16_t q){ return (float)q / 16384.0f; }
+    static int16_t vel_to_q15(float vel_rad_s){ return (int16_t)lrintf(vel_rad_s * 2048.0f); }
+
+    static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s){
+      memset(&c, 0, sizeof(c));
+      c.sof = ACT_SOF;  c.version = PROTO_VERSION_V2;  c.len = ACT_SIZE - 1;
+      c.seq = seq;
+      c.mode = 2; // VELOCITY
+      c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s);   
+      c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1, 0x00);
+    }
+    static bool validateTelemetryV2(const uint8_t* buf, size_t n){
+      if (n != TEL2_SIZE) return false;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      if (f.sof != TEL_SOF) return false;
+      if (f.version != PROTO_VERSION_V2) return false;
+      if (f.len != TEL2_LEN) return false;
+      uint8_t calc = crc8_sum(buf, TEL2_SIZE - 1, 0x00);
+      return (calc == f.crc8);
+    }
+    // ==== SLIP helpers ====
+    static void slip_write_byte(HardwareSerial& U, uint8_t b){
+      if (b==SLIP_END){ U.write(SLIP_ESC); U.write(SLIP_ESC_END); }
+      else if (b==SLIP_ESC){ U.write(SLIP_ESC); U.write(SLIP_ESC_ESC); }
+      else U.write(b);
+    }
+    static void slip_write_frame(HardwareSerial& U, const uint8_t* data, size_t n){
+      U.write(SLIP_END);
+      for(size_t i=0;i<n;i++) slip_write_byte(U, data[i]);
+      U.write(SLIP_END);
+    }
+
+    typedef void (*SlipFrameHandler)(uint8_t*, size_t);
+
+    static void slip_feed_byte(uint8_t b, SlipFrameHandler onFrame){
+      // Un parser por tarea RX; lo haremos miembro de un “contexto”
+      // Para permitir dos instancias, vamos a mover esto a un struct.
+    }
+
+    // ====== Contexto reutilizable por bus ======
+    struct LinkCtx {
+      HardwareSerial* U;
+      Aquiles::Detection::Leg leg;     // L o R
+      SemaphoreHandle_t ioMutex;
+      uint8_t seq;
+
+      // RX state (SLIP)
+      static const size_t RX_BUF_MAX = 256;
+      uint8_t  rx_buf[RX_BUF_MAX];
+      size_t   rx_len;
+      bool     rx_in_frame;
+      bool     esc;
+
+      LinkCtx(): U(nullptr), leg(Aquiles::Detection::Leg::L),
+                ioMutex(nullptr), seq(0),
+                rx_len(0), rx_in_frame(false), esc(false) {}
+    };
+
+    // Dos contextos: uno por enlace
+    static LinkCtx CTX_L;
+    static LinkCtx CTX_R;
+
+    static void ctx_slip_feed(LinkCtx& C, uint8_t b, SlipFrameHandler onFrame){
+      if (b == SLIP_END){
+        if (C.rx_in_frame && C.rx_len >= TEL2_SIZE){
+          if (onFrame) onFrame(C.rx_buf, C.rx_len);
         }
-        // =================== CONFIG ===================
-        static SPISettings RP2040_SETTINGS(1000000, MSBFIRST, SPI_MODE0);
+        C.rx_len = 0;
+        C.rx_in_frame = true;
+        C.esc = false;
+        return;
+      }
+      if (!C.rx_in_frame) return;
 
-        static SemaphoreHandle_t spiMutex = nullptr;
-        static inline void lock()   { xSemaphoreTake(spiMutex, portMAX_DELAY); }
-        static inline void unlock() { xSemaphoreGive(spiMutex); }
-        static inline uint8_t xfer(uint8_t b) { return SPI.transfer(b); }
+      if (C.esc){
+        if (b==SLIP_ESC_END) b = SLIP_END;
+        else if (b==SLIP_ESC_ESC) b = SLIP_ESC;
+        C.esc = false;
+      } else if (b == SLIP_ESC){
+        C.esc = true;
+        return;
+      }
 
-        // Pines (ajustá según tu hardware)
-        static constexpr int CS_L = 15;    // CS pierna izquierda
-        static constexpr int CS_R = 7;   // CS pierna derecha
-        static constexpr int PIN_SCK  = 16;
-        static constexpr int PIN_MISO = 5;
-        static constexpr int PIN_MOSI = 6;
+      if (C.rx_len < LinkCtx::RX_BUF_MAX) C.rx_buf[C.rx_len++] = b;
+    }
 
-        // =================== Protocolo ===================
-        static constexpr uint8_t PROTO_VERSION = 0x01;
-        static constexpr uint8_t ACT_SOF = 0x5A;
-        static constexpr uint8_t TEL_SOF = 0xA5;
-        static constexpr size_t  ACT_SIZE = 16;
-        static constexpr size_t  TEL_SIZE = 36;
-        static constexpr uint8_t TEL_LEN_FIELD = 35;
-  
+    // ===== OC hold =====
+    static constexpr uint16_t FLAG_OC = (1u<<0);
+    #include <esp_timer.h>
+    static inline uint32_t now_ms(){ return (uint32_t)(esp_timer_get_time()/1000ULL); }
+    static uint32_t hold_until_L_ms = 0;
+    static uint32_t hold_until_R_ms = 0;
 
-        #pragma pack(push,1)
-        struct ActuationCmdV1 {
-          uint8_t  sof, version, len, seq;
-          uint8_t  mode, rsv0;
-          int16_t  tgt_q15, kp_q15, kd_q15;
-          uint16_t limits;
-          uint8_t  rsv1, crc8;
-        };
+    static void ingestTelemetryV2(const TelemetryFrameV2& f, Aquiles::Detection::Leg leg){
+      Aquiles::Detection::SampleIn s{};
+      s.ts_us       = f.t_us;
+      s.theta_rad   = q15_to_rad(f.enc_q15);
+      s.accel_fwd_g = NAN;      // IMU viene por I2C
+      s.imu_sat     = false;
 
-        struct TelemetryFrameV1 {
-          uint8_t  sof, version, len, seq;
-          uint32_t t_us;
-          uint16_t flags, sample_hz;
-          int16_t  enc_q15;
-          int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
-          int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
-          uint16_t err_code, frame_ctr;
-          uint8_t  reserved[5], crc8;
-        };
-        #pragma pack(pop)
+      Aquiles::Detection::pushSample(leg, s);
 
-        // =================== Utilitarios ===================
-        uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init) {
-          uint8_t crc = init;
-          for (size_t i = 0; i < len; ++i) {
-            crc ^= data[i];
-            for (uint8_t k = 0; k < 8; ++k)
-              crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
-          }
-          return crc;
+      // OC → hold y clamp de referencia
+      static constexpr uint16_t FLAG_OC = (1u<<0);
+      if (f.flags & FLAG_OC){
+        uint32_t t = now_ms();
+        if (leg==Aquiles::Detection::Leg::L) hold_until_L_ms = t + 200;
+        else                                  hold_until_R_ms = t + 200;
+        Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
+      }
+    }
+    static void on_slip_frame_L(uint8_t* buf, size_t n){
+      if (!validateTelemetryV2(buf, n)) return;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      ingestTelemetryV2(f, Aquiles::Detection::Leg::L);
+    }
+
+    static void on_slip_frame_R(uint8_t* buf, size_t n){
+      if (!validateTelemetryV2(buf, n)) return;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      ingestTelemetryV2(f, Aquiles::Detection::Leg::R);
+    }
+    // ===== Tasks =====
+    static void vTxTask(void* pv){
+      LinkCtx* C = static_cast<LinkCtx*>(pv);
+      TickType_t last = xTaskGetTickCount();
+      for(;;){
+        if (Aquiles::Safety::triggered()){
+          Serial.println("[UARTDual] E-STOP: deteniendo TX.");
+          vTaskDelete(nullptr);
         }
 
-        float q15_to_rad(int16_t q)   { return (float)q * 2.0f * (float)M_PI / 32768.0f; }
-        float q14_to_g(int16_t q)     { return (float)q / 16384.0f; }
-        int16_t amps_to_q15(float a)  { return (int16_t)lrintf(a * 1024.0f); }
+        using Aquiles::Detection::Leg;
+        auto cmd = Aquiles::Detection::getCmd(C->leg);
 
-        // =================== Helpers ===================
-        static bool validateTelemetry(const TelemetryFrameV1& f) {
-          if (f.sof != TEL_SOF || f.version != PROTO_VERSION || f.len != TEL_LEN_FIELD)
-            return false;
-          uint8_t calc = crc8_sum(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE - 1);
-          return (calc == f.crc8);
+        uint32_t t = now_ms();
+        if (C->leg == Leg::L && t < hold_until_L_ms) cmd.setpoint = 0.0f;
+        if (C->leg == Leg::R && t < hold_until_R_ms) cmd.setpoint = 0.0f;
+
+        ActuationCmdV1 c{};
+        uint8_t seq = ++C->seq;
+        buildActCmd(c, seq, cmd.setpoint);
+
+        if (C->ioMutex) xSemaphoreTake(C->ioMutex, portMAX_DELAY);
+        slip_write_frame(*C->U, reinterpret_cast<uint8_t*>(&c), ACT_SIZE);
+        if (C->ioMutex) xSemaphoreGive(C->ioMutex);
+
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
+      }
+    }
+
+    static void vRxTask(void* pv){
+      LinkCtx* C = static_cast<LinkCtx*>(pv);
+      SlipFrameHandler cb = (C->leg == Aquiles::Detection::Leg::L) ? &on_slip_frame_L : &on_slip_frame_R;
+      for(;;){
+        while (C->U->available()){
+          uint8_t b = (uint8_t)C->U->read();
+          ctx_slip_feed(*C, b, cb);
         }
-        inline int16_t vel_to_q15(float vel_rad_s) { return (int16_t)lrintf(vel_rad_s * 2048.0f); }
-        inline float   q15_to_vel(int16_t q)       { return (float)q / 2048.0f; }
+        vTaskDelay(pdMS_TO_TICKS(1));
+      }
+    }
 
-        // 2) Constructor del comando ACTUALIZADO: ahora manda VELOCIDAD
-        static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s) {
-          memset(&c, 0, sizeof(c));
-          c.sof = ACT_SOF;  c.version = PROTO_VERSION;  c.len = ACT_SIZE - 1;
-          c.seq = seq;
-          c.mode = 2; // VELOCITY  (antes era 1 para torque)
-          c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s); // setpoint = rad/s ARTICULAR
-          c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1);
-        }
+    // ===== API =====
+    void init(){
+      // Contexto Left
+      CTX_L.U = &U_L;
+      CTX_L.leg = Aquiles::Detection::Leg::L;
+      if (!CTX_L.ioMutex) CTX_L.ioMutex = xSemaphoreCreateMutex();
 
+      // Contexto Right
+      CTX_R.U = &U_R;
+      CTX_R.leg = Aquiles::Detection::Leg::R;
+      if (!CTX_R.ioMutex) CTX_R.ioMutex = xSemaphoreCreateMutex();
 
-        static void ingestTelemetry(const TelemetryFrameV1& f, Leg leg) {
-          Detection::SampleIn s{};
-          s.ts_us       = f.t_us;
-          s.theta_rad   = q15_to_rad(f.enc_q15);
-          s.accel_fwd_g = q14_to_g(f.mpu_ax_q14);
-          s.imu_sat     = (f.flags & (1u << 5)) != 0;
-          Detection::pushSample(leg, s);
-          // --- Detecta sobrecorriente proveniente del RP2040 ---
-          if (f.flags & FLAG_OC) {
-            uint32_t t = now_ms();
-            if (leg == Leg::L) hold_until_L_ms = t + 200;  // mantener 200 ms
-            else               hold_until_R_ms = t + 200;
+      // Begin UARTs
+      U_L.begin(UART_BAUD, SERIAL_8N1, L_RX, L_TX);
+      U_R.begin(UART_BAUD, SERIAL_8N1, R_RX, R_TX);
 
-            // Opcional: fijar el ángulo como meta final (simular fin de paso)
-            Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
-          }
-          static uint32_t lastLog = 0;
-          uint32_t now = millis();
-          if (now - lastLog > 500) {
-            lastLog = now;
-            Serial.printf("[SPI] seq=%u frame=%u enc_q15=%d flags=0x%04X reserved=[%u,%u,%u,%u,%u]\n",
-              f.seq, f.frame_ctr, f.enc_q15, f.flags,
-              f.reserved[0], f.reserved[1], f.reserved[2], f.reserved[3], f.reserved[4]);
-          }
-        }
+      Serial.printf("[UARTDual] L: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, L_TX, L_RX);
+      Serial.printf("[UARTDual] R: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, R_TX, R_RX);
+    }
 
-        static bool xfer_one(uint8_t csPin, const ActuationCmdV1& cmd, TelemetryFrameV1& outFrame) {
-          lock();
-          SPI.beginTransaction(RP2040_SETTINGS);
-          digitalWrite(csPin, LOW);
+    void startTasks(){
+      // L
+      xTaskCreatePinnedToCore(vTxTask, "UartTX_L", 4096, &CTX_L, 5, nullptr, 1);
+      xTaskCreatePinnedToCore(vRxTask, "UartRX_L", 4096, &CTX_L, 6, nullptr, 1);
+      // R
+      xTaskCreatePinnedToCore(vTxTask, "UartTX_R", 4096, &CTX_R, 5, nullptr, 1);
+      xTaskCreatePinnedToCore(vRxTask, "UartRX_R", 4096, &CTX_R, 6, nullptr, 1);
+    }
 
-          const uint8_t* tx = reinterpret_cast<const uint8_t*>(&cmd);
-          for (size_t i = 0; i < ACT_SIZE; ++i) (void)xfer(tx[i]);
-
-          uint8_t* rx = reinterpret_cast<uint8_t*>(&outFrame);
-          for (size_t i = 0; i < TEL_SIZE; ++i) rx[i] = xfer(0x00);
-
-          digitalWrite(csPin, HIGH);
-          SPI.endTransaction();
-          unlock();
-          return validateTelemetry(outFrame);
-        }
-
-        // =================== Tarea SPI ===================
-        static void vSpiTickTask(void*) {
-          TickType_t last = xTaskGetTickCount();
-          uint8_t seq = 0;
-
-          for (;;) {
-            ++seq;
-            if (Aquiles::Safety::triggered()) {
-              Serial.println("[SPI] E-STOP: deteniendo tarea SPI.");
-              vTaskDelete(nullptr);      // mata la tarea SPI definitivamente
-            }
-            auto cmdL = Detection::getCmd(Leg::L);
-            auto cmdR = Detection::getCmd(Leg::R);
-            // --- Detecta sobrecorriente proveniente del RP2040 ---
-            auto kill_if_hold = [&](Leg leg, Aquiles::Detection::CmdOut& cmd){
-            uint32_t t = now_ms();
-            if (leg == Leg::L) {
-                if (t < hold_until_L_ms) cmd.setpoint = 0.0f;
-              } else {
-            if (t < hold_until_R_ms) cmd.setpoint = 0.0f;
-              }
-            };
-            kill_if_hold(Leg::L, cmdL);
-            kill_if_hold(Leg::R, cmdR);
-
-            ActuationCmdV1 cL{}, cR{};
-            buildActCmd(cL, seq, cmdL.setpoint);
-            buildActCmd(cR, seq, cmdR.setpoint);
-
-            TelemetryFrameV1 fL{}, fR{};
-            bool okL = xfer_one(CS_L, cL, fL);
-            if (okL) ingestTelemetry(fL, Leg::L);
-            else {
-              Serial.println("[SPI][L] telemetry CRC/format FAIL");
-            }
-
-            bool okR = xfer_one(CS_R, cR, fR);
-            if (okR) ingestTelemetry(fR, Leg::R);
-            else {
-              Serial.println("[SPI][R] telemetry CRC/format FAIL");
-            }
-
-            vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
-          }
-        }
-
-        // =================== API pública ===================
-        void init() {
-          pinMode(CS_L, OUTPUT); digitalWrite(CS_L, HIGH);
-          pinMode(CS_R, OUTPUT); digitalWrite(CS_R, HIGH);
-          SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, CS_L);
-          if (!spiMutex) spiMutex = xSemaphoreCreateMutex();
-          Serial.println("[SPIBus] Inicializado (dos CS: L/R).");
-        }
-
-        void startTickTask() {
-          xTaskCreatePinnedToCore(vSpiTickTask, "SpiTick", 4096, nullptr, 5, nullptr, 1);
-        }
-    } // namespace SPIBus
+    } // namespace UARTDual
     namespace Safety {
         constexpr int PIN_ESTOP = 8;          // ajustá a tu botón
         static volatile bool g_estop = false;
@@ -524,6 +595,105 @@ namespace Aquiles {
         inline bool triggered(){ return g_estop; }
         } // namespace Safety
       // ================= BATTERY / POWER =================
+    namespace IMU {
+
+    static Adafruit_MPU6050 mpuL, mpuR;
+    static TwoWire* W = &Wire;
+    static Cfg G{};
+    static bool hasL=false, hasR=false;
+
+    static float take_axis(const sensors_event_t& a, int8_t axis){
+      switch(axis){
+        case 0: return a.acceleration.x; // m/s^2
+        case 1: return a.acceleration.y;
+        case 2: return a.acceleration.z;
+        default: return 0.0f;
+      }
+    }
+    static float take_gyro(const sensors_event_t& g, int8_t axis){
+      switch(axis){
+        case 0: return g.gyro.x;  // rad/s
+        case 1: return g.gyro.y;
+        case 2: return g.gyro.z;
+        default: return 0.0f;
+      }
+    }
+
+    bool init(const Cfg& cfg, TwoWire* bus){
+      G = cfg;
+      if (bus) W = bus;
+
+      // Arrancar I2C (si no está ya)
+      // En ESP32 puedes especificar pines si lo necesitás: W->begin(SDApin, SCLpin, freq);
+      W->begin();
+
+      // Intentar begin para ambos
+      hasL = mpuL.begin(G.addr_L, W);
+      hasR = mpuR.begin(G.addr_R, W);
+
+      if (hasL) {
+        mpuL.setAccelerometerRange(MPU6050_RANGE_4_G);
+        mpuL.setGyroRange(MPU6050_RANGE_500_DEG);
+        mpuL.setFilterBandwidth(MPU6050_BAND_44_HZ);
+      }
+      if (hasR) {
+        mpuR.setAccelerometerRange(MPU6050_RANGE_4_G);
+        mpuR.setGyroRange(MPU6050_RANGE_500_DEG);
+        mpuR.setFilterBandwidth(MPU6050_BAND_44_HZ);
+      }
+
+      Serial.printf("[IMU] L addr=0x%02X %s | R addr=0x%02X %s\n",
+          G.addr_L, hasL?"OK":"FAIL", G.addr_R, hasR?"OK":"FAIL");
+      return hasL || hasR;
+    }
+
+    static void vTaskIMU(void*){
+      const TickType_t per = pdMS_TO_TICKS(G.period_ms);
+      for(;;){
+        sensors_event_t aL, gL, tL;
+        sensors_event_t aR, gR, tR;
+
+        uint32_t ts = (uint32_t)micros();
+
+        if (hasL){
+          mpuL.getEvent(&aL, &gL, &tL);
+          float a_fwd_ms2 = (float)G.fwd_sign_L * take_axis(aL, G.fwd_axis_L);
+          float a_fwd_g   = a_fwd_ms2 / 9.80665f;
+
+          Aquiles::Detection::SampleIn s{};
+          s.ts_us       = ts;
+          s.theta_rad   = NAN;          // no toco ángulo
+          s.accel_fwd_g = a_fwd_g;      // sí actualizo accel
+          // podés usar gyro si querés (omega_imu), ej: eje de flex/ext
+          s.omega_imu   = take_gyro(gL, G.fwd_axis_L);
+          // heurística saturación: |a|>3g o |gyro|>1000 dps
+          s.imu_sat     = (fabsf(a_fwd_g)>3.0f) || (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
+          Aquiles::Detection::pushSample(Aquiles::Detection::Leg::L, s);
+        }
+
+        if (hasR){
+          mpuR.getEvent(&aR, &gR, &tR);
+          float a_fwd_ms2 = (float)G.fwd_sign_R * take_axis(aR, G.fwd_axis_R);
+          float a_fwd_g   = a_fwd_ms2 / 9.80665f;
+
+          Aquiles::Detection::SampleIn s{};
+          s.ts_us       = ts;
+          s.theta_rad   = NAN;
+          s.accel_fwd_g = a_fwd_g;
+          s.omega_imu   = take_gyro(gR, G.fwd_axis_R);
+          s.imu_sat     = (fabsf(a_fwd_g)>3.0f) || (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
+          Aquiles::Detection::pushSample(Aquiles::Detection::Leg::R, s);
+        }
+
+        vTaskDelay(per);
+      }
+    }
+
+    void startTask(){
+      xTaskCreatePinnedToCore(vTaskIMU, "IMU", 4096, nullptr, 3, nullptr, 0);
+    }
+
+    } // namespace IMU
     namespace Power {
 
       // ---- PINS (ajustá a tu placa) ----
