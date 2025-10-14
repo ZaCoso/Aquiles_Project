@@ -1,10 +1,16 @@
 // ========= ESP32: Master UART (envía CMD, recibe TEL) =========
 #include <Arduino.h>
 
-// ==== Pines UART ESP32 (CAMBIAR si usás otros) ====
-#define ESP32_UART_RX 15   // TX del ESP32 (va a RX del RP2040 GP13)
-#define ESP32_UART_TX 6   // RX del ESP32 (viene de TX del RP2040 GP12)
+// ==== Pines UART ESP32  ====
+// OJO: Serial1.begin(baud, config, RX, TX)
+#define ESP32_UART_RX 15   // RX del ESP32  (conectado al TX del RP2040/2350 GP12)
+#define ESP32_UART_TX 6    // TX del ESP32  (conectado al RX del RP2040/2350 GP13)
 #define ESP32_BAUD   2000000
+
+// LED “heartbeat” (ajusta si tu placa usa otro)
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 2
+#endif
 
 // ========= Protocolo =========
 #pragma pack(push,1)
@@ -62,23 +68,20 @@ struct SlipRx {
   uint8_t buf[MAX]; size_t len=0;
   bool in_frame=false, esc=false;
 };
-
-// ⚠️ Renombrada para no chocar con la constante global RX del core ESP32
 SlipRx g_slip_rx;
 
 void on_tel_frame(uint8_t* buf, size_t n){
   if (n!=TEL_SIZE) return;
   TelemetryFrameV1 f; memcpy(&f, buf, TEL_SIZE);
-  // CRC y cabecera
   if (f.sof!=TEL_SOF || f.version!=PROTO_VERSION || f.len!=TEL_LEN_FIELD) return;
   uint8_t calc = crc8_0x07((const uint8_t*)&f, TEL_SIZE-1, 0x00);
   if (calc != f.crc8) return;
 
-  // Log mínimo (no spamear mucho)
+  // Log RX limitado
   static uint32_t lastMs=0; uint32_t now=millis();
   if (now-lastMs>200){
     lastMs=now;
-    Serial.printf("[ESP32] TEL seq=%u enc_q15=%d flags=0x%04X frame=%u\n",
+    Serial.printf("[ESP32] RX TEL  seq=%u enc_q15=%d flags=0x%04X frame=%u\n",
                   f.seq, f.enc_q15, f.flags, f.frame_ctr);
   }
 }
@@ -97,10 +100,9 @@ void slip_feed(uint8_t b){
   if (g_slip_rx.len<SlipRx::MAX) g_slip_rx.buf[g_slip_rx.len++]=b;
 }
 
-// Genera CMD con setpoint seno (para probar ida/vuelta)
-int16_t vel_to_q15(float vel_norm){ // vel_norm -1..+1
-  return (int16_t)lrintf(vel_norm * 32767.0f);
-}
+// ======= ENVÍO =======
+int16_t vel_to_q15(float vel_norm){ return (int16_t)lrintf(vel_norm * 32767.0f); }
+
 void send_cmd_tick(){
   static uint8_t seq=0;
   static uint32_t t0=millis();
@@ -115,16 +117,27 @@ void send_cmd_tick(){
   c.crc8 = crc8_0x07((const uint8_t*)&c, ACT_SIZE-1, 0x00);
 
   slip_write_frame((const uint8_t*)&c, ACT_SIZE);
+
+  // --------- LOG de envío limitado ---------
+  static uint32_t lastPrint=0; uint32_t now=millis();
+  if (now - lastPrint >= 200) {
+    lastPrint = now;
+    Serial.printf("[ESP32] TX CMD  seq=%u tgt_q15=%d vel_norm=%.3f\n",
+                  c.seq, c.tgt_q15, vel_norm);
+  }
 }
 
+// ======= SETUP / LOOP =======
 void setup(){
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+
   Serial.begin(115200);
-  delay(500);
+  delay(300);
   Serial.println("\n[ESP32] UART SLIP Master");
 
   Serial1.begin(ESP32_BAUD, SERIAL_8N1, ESP32_UART_RX, ESP32_UART_TX);
-  Serial.println("[ESP32] Serial1 ok @2Mbps. TX->RP2040 GP13, RX<-RP2040 GP12");
-  delay(50);
+  Serial.printf("[ESP32] Serial1 @2Mbps  RX=%d  TX=%d\n", ESP32_UART_RX, ESP32_UART_TX);
 }
 
 void loop(){
@@ -138,5 +151,13 @@ void loop(){
   if (now - last >= 1000){
     last = now;
     send_cmd_tick();
+  }
+
+  // 3) Heartbeat del LED cada ~500 ms (indica que estamos activos enviando)
+  static uint32_t lastBlink=0; static bool led=0;
+  if (millis() - lastBlink >= 500){
+    lastBlink = millis();
+    led = !led;
+    digitalWrite(LED_BUILTIN, led);
   }
 }
