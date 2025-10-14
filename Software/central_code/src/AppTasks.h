@@ -4,7 +4,8 @@
 #include <freertos/task.h>
 #include <SPI.h>
 #include <NimBLEDevice.h>
-
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 namespace Aquiles {
 
     // ====== Config BLE ======
@@ -167,4 +168,22 @@ namespace Aquiles {
     float getPackSOC();
     float getPackSOCmin();
   }
+    namespace IMU {
+        struct Cfg {
+        // Mapea qué dirección I2C corresponde a cada pierna
+        uint8_t addr_L = 0x68;
+        uint8_t addr_R = 0x69;
+
+        // Ejes: cuál es el “forward” (0=x,1=y,2=z) y su signo (+1 o -1) por pierna
+        int8_t  fwd_axis_L = 0;  // 0:X,1:Y,2:Z
+        int8_t  fwd_sign_L = +1; // +1 o -1
+        int8_t  fwd_axis_R = 0;
+        int8_t  fwd_sign_R = +1;
+
+        uint16_t period_ms = 5;   // 200 Hz
+        };
+
+        bool init(const Cfg& cfg = Cfg{}, TwoWire* bus = &Wire);
+        void startTask();
+    }
 } // namespace Aquiles
