@@ -3,9 +3,8 @@
 #define Wire Wire1  
 #include <AS5600.h>
 
-#include <Adafruit_MPU6050.h>
 #include <Adafruit_NeoPixel.h>
-#include <Adafruit_Sensor.h>
+
 #include <SimpleFOC.h>
 #include "pico/stdlib.h"
 #include "hardware/irq.h"
@@ -30,7 +29,7 @@ Adafruit_NeoPixel pixels(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 AS5600 encoder_i2c;    
 
-Adafruit_MPU6050 mpu;
+
 
 // --- Definición de hardware ---
 BLDCMotor motor = BLDCMotor(7);                  // Motor con 7 pares de polos
@@ -56,7 +55,7 @@ namespace DriverUART {
   static constexpr uint     UART_RX_PIN = 13;        // GP13 = UART0 RX
   #define UART_ID uart0
 
-  static constexpr uint8_t  PROTO_VERSION  = 0x01;
+
   static constexpr uint8_t  ACT_SOF        = 0x5A;
   static constexpr uint8_t  TEL_SOF        = 0xA5;
   static constexpr size_t   ACT_SIZE       = 16;
@@ -66,8 +65,9 @@ namespace DriverUART {
 
   static volatile bool g_inited = false;
 
-  // ===================== Estructuras de frame =====================
+  static constexpr uint8_t  PROTO_VERSION_V2 = 0x02; // la nueva compacta
   #pragma pack(push,1)
+// --- Comando (igual que antes) ---
   struct ActuationCmdV1 {
     uint8_t  sof, version, len, seq;
     uint8_t  mode, rsv0;
@@ -75,21 +75,27 @@ namespace DriverUART {
     uint16_t limits;
     uint8_t  rsv1, crc8;
   };
-  struct TelemetryFrameV1 {
-    uint8_t  sof, version, len, seq;
-    uint32_t t_us;
-    uint16_t flags, sample_hz;
-    int16_t  enc_q15;
-    int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
-    int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
-    uint16_t err_code, frame_ctr;
-    uint8_t  reserved[5], crc8;
+  struct TelemetryFrameV2 {
+    uint8_t  sof;        // 0xA5
+    uint8_t  version;    // 0x02
+    uint8_t  len;        // = sizeof(TelemetryFrameV2)-1
+    uint8_t  seq;
+    uint32_t t_us;       // timestamp
+    uint16_t flags;      // bit0=OC, etc.
+    int16_t  enc_q15;    // ángulo encoder
+    int16_t  ipeak_q15;  // pico de corriente*1024
+    uint8_t  phase_peak; // 0..2
+    uint16_t frame_ctr;
+    uint8_t  crc8;
   };
   #pragma pack(pop)
 
+  static constexpr size_t TEL2_SIZE      = sizeof(TelemetryFrameV2);   // 20
+  static constexpr uint8_t TEL2_LEN      = TEL2_SIZE - 1;
+
   // ===================== Buffers y estado =====================
   static repeating_timer_t g_tim;
-  static volatile TelemetryFrameV1 g_tx_buf[2];
+  static volatile TelemetryFrameV2 g_tx_buf[2];
   static volatile uint8_t  g_idx_wr = 0;
   static volatile uint8_t  g_idx_rd = 1;
   static volatile uint32_t g_frame_ctr = 0;
@@ -101,8 +107,6 @@ namespace DriverUART {
   // ===================== Sensor snapshot =====================
   struct SensorSnap {
     float enc_rad;                 
-    float ax_g, ay_g, az_g;
-    float gx_rads, gy_rads, gz_rads;
     float iA, iB, iC;
     float i_peak;
     uint8_t phase_peak;
@@ -155,41 +159,30 @@ namespace DriverUART {
   }
 
   // ===================== Telemetría =====================
-  static void fillTelemetry(TelemetryFrameV1& f){
+  static void fillTelemetryV2(TelemetryFrameV2& f){
     SensorSnap s{};
     uint32_t irq = save_and_disable_interrupts();
     memcpy(&s, (const void*)&g_snap, sizeof(SensorSnap));
     restore_interrupts(irq);
 
-    f.sof = TEL_SOF;
-    f.version = PROTO_VERSION;
-    f.len = TEL_LEN_FIELD;
-    f.seq = g_seq;
-    f.t_us = micros32();
-    f.flags = s.overcurrent ? FLAG_OC : 0;
-    f.sample_hz = 1000;
-    f.enc_q15 = rad_to_q15(s.enc_rad);
-    f.mpu_ax_q14 = g_to_q14(s.ax_g);
-    f.mpu_ay_q14 = g_to_q14(s.ay_g);
-    f.mpu_az_q14 = g_to_q14(s.az_g);
-    f.mpu_gx_q14 = gyro_to_q15(s.gx_rads, 4.3633f);
-    f.mpu_gy_q14 = gyro_to_q15(s.gy_rads, 4.3633f);
-    f.mpu_gz_q14 = gyro_to_q15(s.gz_rads, 4.3633f);
-    f.err_code = 0;
-    f.frame_ctr = (uint16_t)(g_frame_ctr & 0xFFFF);
-    int16_t ipeak_q15 = (int16_t)lrintf(s.i_peak * 1024.0f);
-    f.reserved[0] = (uint8_t)(ipeak_q15 & 0xFF);
-    f.reserved[1] = (uint8_t)((ipeak_q15 >> 8) & 0xFF);
-    f.reserved[2] = (uint8_t)((s.overcurrent?0x80:0x00)|(s.phase_peak&0x03));
-    f.reserved[3] = f.reserved[4] = 0;
-    f.crc8 = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE-1, 0x00);
+    f.sof      = TEL_SOF;
+    f.version  = PROTO_VERSION_V2;
+    f.len      = TEL2_LEN;
+    f.seq      = g_seq;
+    f.t_us     = micros32();
+    f.flags    = s.overcurrent ? FLAG_OC : 0;
+    f.enc_q15  = rad_to_q15(s.enc_rad);
+    f.ipeak_q15= (int16_t)lrintf(s.i_peak * 1024.0f);
+    f.phase_peak = s.phase_peak;
+    f.frame_ctr= (uint16_t)(g_frame_ctr & 0xFFFF);
+    f.crc8     = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL2_SIZE-1, 0x00);
   }
 
   static bool timer_cb(repeating_timer_t*){
-    TelemetryFrameV1 w{};
-    fillTelemetry(w);
+    TelemetryFrameV2 w{};
+    fillTelemetryV2(w);
     uint32_t irq = save_and_disable_interrupts();
-    memcpy((void*)&g_tx_buf[g_idx_wr], &w, sizeof(TelemetryFrameV1));
+    memcpy((void*)&g_tx_buf[g_idx_wr], &w, sizeof(TelemetryFrameV2));
     uint8_t old_rd = g_idx_rd;
     g_idx_rd = g_idx_wr;
     g_idx_wr = old_rd;
@@ -215,9 +208,9 @@ namespace DriverUART {
     adc_gpio_init(27);
     adc_gpio_init(28);
 
-    TelemetryFrameV1 z{}; fillTelemetry(z);
-    memcpy((void*)&g_tx_buf[0], &z, sizeof(TelemetryFrameV1));
-    memcpy((void*)&g_tx_buf[1], &z, sizeof(TelemetryFrameV1));
+    TelemetryFrameV2 z{}; fillTelemetryV2(z);
+    memcpy((void*)&g_tx_buf[0], &z, sizeof(TelemetryFrameV2));
+    memcpy((void*)&g_tx_buf[1], &z, sizeof(TelemetryFrameV2));
 
     add_repeating_timer_us(-1000, timer_cb, nullptr, &g_tim);
     Serial.println("[DriverUART] listo (UART0 GP12/GP13, 2Mbps).");
@@ -229,9 +222,9 @@ namespace DriverUART {
       slip_feed(b);
     }
 
-    TelemetryFrameV1 snap{};
+    TelemetryFrameV2 snap{};
     uint32_t irq = save_and_disable_interrupts();
-    memcpy(&snap, (const void*)&g_tx_buf[g_idx_rd], sizeof(TelemetryFrameV1));
+    memcpy(&snap, (const void*)&g_tx_buf[g_idx_rd], sizeof(TelemetryFrameV2));
     restore_interrupts(irq);
     slip_write_frame(reinterpret_cast<const uint8_t*>(&snap), TEL_SIZE);
   }
@@ -250,7 +243,7 @@ namespace DriverUART {
     uint32_t age = micros32() - g_last_cmd_us;
     restore_interrupts(irq);
     out = tmp; seq_out = sq; age_us_out = age;
-    bool ok = (out.sof==ACT_SOF && out.version==PROTO_VERSION && out.len==(ACT_SIZE-1));
+    bool ok = (out.sof==ACT_SOF && out.version==PROTO_VERSION_V2 && out.len==(ACT_SIZE-1));
     return ok;
   }
 
@@ -258,15 +251,6 @@ namespace DriverUART {
   static inline float read_encoder_rad_noprint(){
     uint16_t raw = encoder_i2c.readAngle(); // 0..4095
     return (raw * (2.0f*M_PI)) / 4096.0f;
-  }
-
-  static inline void sample_mpu(float& ax_g, float& ay_g, float& az_g,
-                                float& gx, float& gy, float& gz){
-    sensors_event_t a,g,t;
-    mpu.getEvent(&a,&g,&t);
-    const float g0=9.80665f;
-    ax_g=a.acceleration.x/g0; ay_g=a.acceleration.y/g0; az_g=a.acceleration.z/g0;
-    gx=g.gyro.x; gy=g.gyro.y; gz=g.gyro.z;
   }
 
   struct PhaseCal { float gain_VperA; float offset_V; int adc_ch; };
@@ -377,31 +361,6 @@ void MotorVelMove(float vel) {
 }
 
 
-// --- Función para leer y mostrar datos ---
-std::vector<float> readMPU6050() {
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-
-  Serial.print("Aceleración [m/s^2] X:");
-  Serial.print(a.acceleration.x);
-  Serial.print(" Y:");
-  Serial.print(a.acceleration.y);
-  Serial.print(" Z:");
-  Serial.println(a.acceleration.z);
-
-  Serial.print("Giroscopio [rad/s] X:");
-  Serial.print(g.gyro.x);
-  Serial.print(" Y:");
-  Serial.print(g.gyro.y);
-  Serial.print(" Z:");
-  Serial.println(g.gyro.z);
-  float gravity = 9.80665f;
-  return {a.acceleration.x/gravity, 
-    a.acceleration.y/gravity, 
-    a.acceleration.z/gravity , 
-    g.gyro.x, g.gyro.y, g.gyro.z};
-}
-
 float encoder_5600(){
   uint16_t raw = encoder_i2c.readAngle();       // 0–4095
   float grados = raw * 360.0 / 4096;  // Conversión a grados
@@ -423,7 +382,7 @@ void setup() {
   Wire1.setSDA(14);
   Wire1.setSCL(15);
   Wire1.begin();  
-  // mpu.begin();     
+
   encoder_i2c.begin();
 
   DriverUART::begin();
@@ -456,18 +415,20 @@ void loop() {
   float dt = (now_us - last_us) * 1e-6f;
   last_us = now_us;
 
-  // 3) Sensores cada ~2 ms
+  // 3) Sens ores cada ~2 ms
   static uint32_t last_sense_us = 0;
   if (now_us - last_sense_us >= 2000) {
     last_sense_us = now_us;
 
     DriverUART::SensorSnap s{};
+
     // Encoder (sin prints)
-    s.enc_rad = DriverUART::read_encoder_rad_noprint(); // ← reusa tu helper existente
-    // IMU
-    DriverUART::sample_mpu(s.ax_g, s.ay_g, s.az_g, s.gx_rads, s.gy_rads, s.gz_rads);
+    s.enc_rad = DriverUART::read_encoder_rad_noprint();
+
     // Corrientes
-    DriverUART ::read_currents_3ph(s.iA, s.iB, s.iC);
+    DriverUART::read_currents_3ph(s.iA, s.iB, s.iC);
+
+    // Pico y fase
     float aA=fabsf(s.iA), aB=fabsf(s.iB), aC=fabsf(s.iC);
     s.i_peak = aA; s.phase_peak = 0;
     if (aB > s.i_peak) { s.i_peak = aB; s.phase_peak = 1; }
@@ -479,9 +440,10 @@ void loop() {
     uint32_t now_ms = now_us / 1000u;
     if (s.i_peak > I_HW_TRIP_A) DriverUART::g_oc_hold_until_ms = now_ms + HW_TRIP_HOLD_MS;
     s.overcurrent = (now_ms < DriverUART::g_oc_hold_until_ms);
+
     s.t_us = now_us;
 
-    // Publicar snapshot para telemetría (atómico)
+    // Publicar snapshot (atómico)
     uint32_t irq = save_and_disable_interrupts();
     memcpy((void*)&DriverUART::g_snap, &s, sizeof(DriverUART::SensorSnap));
     restore_interrupts(irq);

@@ -8,6 +8,17 @@ void setup() {
     Aquiles::Safety::init();  
     xTaskCreate(Tasks::Init,  "Init",   tskINIT_STACK,  nullptr, tskINIT_PRIORITY,  nullptr);
     xTaskCreate(Tasks::Blink, "Blinky", tskBLINK_STACK, nullptr, tskBLINK_PRIORITY, nullptr);
+  // --- IMU on I2C ---
+  Aquiles::IMU::Cfg icfg;
+  icfg.addr_L = 0x68;            // AD0 a GND
+  icfg.addr_R = 0x69;            // AD0 a VCC
+  icfg.fwd_axis_L = 0;           // eje X como “forward” L
+  icfg.fwd_axis_R = 0;           // eje X como “forward” R
+  icfg.fwd_sign_L = +1;          // ajustá según montaje real
+  icfg.fwd_sign_R = +1;
+
+  Aquiles::IMU::init(icfg, &Wire /*o &Wire1 si usás ese bus*/);
+  Aquiles::IMU::startTask();
 
     BLE::init();
 

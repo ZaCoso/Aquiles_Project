@@ -111,39 +111,51 @@ namespace Aquiles {
           // LEFT
           SampleIn inL;
           if (xQueueReceive(qInL, &inL, 0)==pdTRUE){
+            // timestamp seguro
             uint32_t ts = inL.ts_us ? inL.ts_us : micros32();
-            float th = unwrap(inL.theta_rad, thL_prev);
-            float dt = (tsL_prev==0) ? 0.001f : (float)(ts - tsL_prev)/1e6f;  // s
-            if (dt <= 0) dt = 1e-3f;
-            float w  = (th - thL_prev)/dt;
 
-            SIG_L.theta   = th;
-            SIG_L.omega   = w;
-            SIG_L.a_fwd_g = inL.accel_fwd_g;
-            SIG_L.coh_ok  = !inL.imu_sat;      // placeholder
-            SIG_L.rx_us   = ts;
+            // Si viene un ángulo, actualizamos theta/omega
+            if (!isnan(inL.theta_rad)){
+              float th = unwrap(inL.theta_rad, thL_prev);
+              float dt = (tsL_prev==0) ? 0.001f : (float)(ts - tsL_prev)/1e6f;
+              if (dt <= 0) dt = 1e-3f;
+              float w  = (th - thL_prev)/dt;
 
-            thL_prev = th; tsL_prev = ts;
+              SIG_L.theta = th;
+              SIG_L.omega = w;
+              thL_prev = th; tsL_prev = ts;
+            }
+
+            // Si viene aceleración, la actualizamos
+            if (!isnan(inL.accel_fwd_g)) SIG_L.a_fwd_g = inL.accel_fwd_g;
+
+            // Si viene flag de saturación IMU, actualizamos
+            if (inL.imu_sat) SIG_L.coh_ok = false;
+
+            SIG_L.rx_us = ts;
           }
 
           // RIGHT
           SampleIn inR;
           if (xQueueReceive(qInR, &inR, 0)==pdTRUE){
             uint32_t ts = inR.ts_us ? inR.ts_us : micros32();
-            float th = unwrap(inR.theta_rad, thR_prev);
-            float dt = (tsR_prev==0) ? 0.001f : (float)(ts - tsR_prev)/1e6f;
-            if (dt <= 0) dt = 1e-3f;
-            float w  = (th - thR_prev)/dt;
 
-            SIG_R.theta   = th;
-            SIG_R.omega   = w;
-            SIG_R.a_fwd_g = inR.accel_fwd_g;
-            SIG_R.coh_ok  = !inR.imu_sat;
-            SIG_R.rx_us   = ts;
+            if (!isnan(inR.theta_rad)){
+              float th = unwrap(inR.theta_rad, thR_prev);
+              float dt = (tsR_prev==0) ? 0.001f : (float)(ts - tsR_prev)/1e6f;
+              if (dt <= 0) dt = 1e-3f;
+              float w  = (th - thR_prev)/dt;
 
-            thR_prev = th; tsR_prev = ts;
+              SIG_R.theta = th;
+              SIG_R.omega = w;
+              thR_prev = th; tsR_prev = ts;
+            }
+
+            if (!isnan(inR.accel_fwd_g)) SIG_R.a_fwd_g = inR.accel_fwd_g;
+            if (inR.imu_sat) SIG_R.coh_ok = false;
+
+            SIG_R.rx_us = ts;
           }
-
           vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.fusion_period_ms));
         }
       }
@@ -332,7 +344,7 @@ namespace Aquiles {
     HardwareSerial& U_R = Serial2;
 
     // =================== Protocolo (idéntico a SPI) ===================
-    static constexpr uint8_t PROTO_VERSION = 0x01;
+    static constexpr uint8_t PROTO_VERSION_V2 = 0x02; // telemetría nueva (20B
     static constexpr uint8_t ACT_SOF       = 0x5A;
     static constexpr uint8_t TEL_SOF       = 0xA5;
     static constexpr size_t  ACT_SIZE      = 16;
@@ -353,19 +365,22 @@ namespace Aquiles {
       uint16_t limits;
       uint8_t  rsv1, crc8; // rsv1 sin uso en modo dual-bus
     };
-    struct TelemetryFrameV1 {
+
+    struct TelemetryFrameV2 {
       uint8_t  sof, version, len, seq;
       uint32_t t_us;
       uint16_t flags, sample_hz;
       int16_t  enc_q15;
-      int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
-      int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
-      uint16_t err_code, frame_ctr;
-      uint8_t  reserved[5], crc8; // reserved[0] sin uso en modo dual-bus
+      int16_t  ipeak_q15;
+      uint8_t  phase_peak;
+      uint16_t frame_ctr;
+      uint8_t  crc8;
     };
     #pragma pack(pop)
 
-    // ===== Utilitarios =====
+    static constexpr size_t TEL2_SIZE      = sizeof(TelemetryFrameV2); // 20
+    static constexpr uint8_t TEL2_LEN      = TEL2_SIZE - 1;
+        // ===== Utilitarios =====
     static uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init){
       uint8_t crc = init;
       for (size_t i = 0; i < len; ++i) {
@@ -381,18 +396,21 @@ namespace Aquiles {
 
     static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s){
       memset(&c, 0, sizeof(c));
-      c.sof = ACT_SOF;  c.version = PROTO_VERSION;  c.len = ACT_SIZE - 1;
+      c.sof = ACT_SOF;  c.version = PROTO_VERSION_V2;  c.len = ACT_SIZE - 1;
       c.seq = seq;
       c.mode = 2; // VELOCITY
       c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s);   
       c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1, 0x00);
     }
-    static bool validateTelemetry(const TelemetryFrameV1& f){
-      if (f.sof!=TEL_SOF || f.version!=PROTO_VERSION || f.len!=TEL_LEN_FIELD) return false;
-      uint8_t calc = crc8_sum(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE - 1, 0x00);
+    static bool validateTelemetryV2(const uint8_t* buf, size_t n){
+      if (n != TEL2_SIZE) return false;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      if (f.sof != TEL_SOF) return false;
+      if (f.version != PROTO_VERSION_V2) return false;
+      if (f.len != TEL2_LEN) return false;
+      uint8_t calc = crc8_sum(buf, TEL2_SIZE - 1, 0x00);
       return (calc == f.crc8);
     }
-
     // ==== SLIP helpers ====
     static void slip_write_byte(HardwareSerial& U, uint8_t b){
       if (b==SLIP_END){ U.write(SLIP_ESC); U.write(SLIP_ESC_END); }
@@ -437,7 +455,7 @@ namespace Aquiles {
 
     static void ctx_slip_feed(LinkCtx& C, uint8_t b, SlipFrameHandler onFrame){
       if (b == SLIP_END){
-        if (C.rx_in_frame && C.rx_len >= TEL_SIZE){
+        if (C.rx_in_frame && C.rx_len >= TEL2_SIZE){
           if (onFrame) onFrame(C.rx_buf, C.rx_len);
         }
         C.rx_len = 0;
@@ -466,14 +484,17 @@ namespace Aquiles {
     static uint32_t hold_until_L_ms = 0;
     static uint32_t hold_until_R_ms = 0;
 
-    static void ingestTelemetry_fixedLeg(const TelemetryFrameV1& f, Aquiles::Detection::Leg leg){
+    static void ingestTelemetryV2(const TelemetryFrameV2& f, Aquiles::Detection::Leg leg){
       Aquiles::Detection::SampleIn s{};
       s.ts_us       = f.t_us;
       s.theta_rad   = q15_to_rad(f.enc_q15);
-      s.accel_fwd_g = q14_to_g(f.mpu_ax_q14);
-      s.imu_sat     = (f.flags & (1u<<5)) != 0;
+      s.accel_fwd_g = NAN;      // IMU viene por I2C
+      s.imu_sat     = false;
+
       Aquiles::Detection::pushSample(leg, s);
 
+      // OC → hold y clamp de referencia
+      static constexpr uint16_t FLAG_OC = (1u<<0);
       if (f.flags & FLAG_OC){
         uint32_t t = now_ms();
         if (leg==Aquiles::Detection::Leg::L) hold_until_L_ms = t + 200;
@@ -481,20 +502,17 @@ namespace Aquiles {
         Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
       }
     }
-
     static void on_slip_frame_L(uint8_t* buf, size_t n){
-      if (n != TEL_SIZE) return;
-      TelemetryFrameV1 f; memcpy(&f, buf, TEL_SIZE);
-      if (!validateTelemetry(f)) return;
-      ingestTelemetry_fixedLeg(f, Aquiles::Detection::Leg::L);
-    }
-    static void on_slip_frame_R(uint8_t* buf, size_t n){
-      if (n != TEL_SIZE) return;
-      TelemetryFrameV1 f; memcpy(&f, buf, TEL_SIZE);
-      if (!validateTelemetry(f)) return;
-      ingestTelemetry_fixedLeg(f, Aquiles::Detection::Leg::R);
+      if (!validateTelemetryV2(buf, n)) return;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      ingestTelemetryV2(f, Aquiles::Detection::Leg::L);
     }
 
+    static void on_slip_frame_R(uint8_t* buf, size_t n){
+      if (!validateTelemetryV2(buf, n)) return;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      ingestTelemetryV2(f, Aquiles::Detection::Leg::R);
+    }
     // ===== Tasks =====
     static void vTxTask(void* pv){
       LinkCtx* C = static_cast<LinkCtx*>(pv);
@@ -577,6 +595,105 @@ namespace Aquiles {
         inline bool triggered(){ return g_estop; }
         } // namespace Safety
       // ================= BATTERY / POWER =================
+    namespace IMU {
+
+    static Adafruit_MPU6050 mpuL, mpuR;
+    static TwoWire* W = &Wire;
+    static Cfg G{};
+    static bool hasL=false, hasR=false;
+
+    static float take_axis(const sensors_event_t& a, int8_t axis){
+      switch(axis){
+        case 0: return a.acceleration.x; // m/s^2
+        case 1: return a.acceleration.y;
+        case 2: return a.acceleration.z;
+        default: return 0.0f;
+      }
+    }
+    static float take_gyro(const sensors_event_t& g, int8_t axis){
+      switch(axis){
+        case 0: return g.gyro.x;  // rad/s
+        case 1: return g.gyro.y;
+        case 2: return g.gyro.z;
+        default: return 0.0f;
+      }
+    }
+
+    bool init(const Cfg& cfg, TwoWire* bus){
+      G = cfg;
+      if (bus) W = bus;
+
+      // Arrancar I2C (si no está ya)
+      // En ESP32 puedes especificar pines si lo necesitás: W->begin(SDApin, SCLpin, freq);
+      W->begin();
+
+      // Intentar begin para ambos
+      hasL = mpuL.begin(G.addr_L, W);
+      hasR = mpuR.begin(G.addr_R, W);
+
+      if (hasL) {
+        mpuL.setAccelerometerRange(MPU6050_RANGE_4_G);
+        mpuL.setGyroRange(MPU6050_RANGE_500_DEG);
+        mpuL.setFilterBandwidth(MPU6050_BAND_44_HZ);
+      }
+      if (hasR) {
+        mpuR.setAccelerometerRange(MPU6050_RANGE_4_G);
+        mpuR.setGyroRange(MPU6050_RANGE_500_DEG);
+        mpuR.setFilterBandwidth(MPU6050_BAND_44_HZ);
+      }
+
+      Serial.printf("[IMU] L addr=0x%02X %s | R addr=0x%02X %s\n",
+          G.addr_L, hasL?"OK":"FAIL", G.addr_R, hasR?"OK":"FAIL");
+      return hasL || hasR;
+    }
+
+    static void vTaskIMU(void*){
+      const TickType_t per = pdMS_TO_TICKS(G.period_ms);
+      for(;;){
+        sensors_event_t aL, gL, tL;
+        sensors_event_t aR, gR, tR;
+
+        uint32_t ts = (uint32_t)micros();
+
+        if (hasL){
+          mpuL.getEvent(&aL, &gL, &tL);
+          float a_fwd_ms2 = (float)G.fwd_sign_L * take_axis(aL, G.fwd_axis_L);
+          float a_fwd_g   = a_fwd_ms2 / 9.80665f;
+
+          Aquiles::Detection::SampleIn s{};
+          s.ts_us       = ts;
+          s.theta_rad   = NAN;          // no toco ángulo
+          s.accel_fwd_g = a_fwd_g;      // sí actualizo accel
+          // podés usar gyro si querés (omega_imu), ej: eje de flex/ext
+          s.omega_imu   = take_gyro(gL, G.fwd_axis_L);
+          // heurística saturación: |a|>3g o |gyro|>1000 dps
+          s.imu_sat     = (fabsf(a_fwd_g)>3.0f) || (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
+          Aquiles::Detection::pushSample(Aquiles::Detection::Leg::L, s);
+        }
+
+        if (hasR){
+          mpuR.getEvent(&aR, &gR, &tR);
+          float a_fwd_ms2 = (float)G.fwd_sign_R * take_axis(aR, G.fwd_axis_R);
+          float a_fwd_g   = a_fwd_ms2 / 9.80665f;
+
+          Aquiles::Detection::SampleIn s{};
+          s.ts_us       = ts;
+          s.theta_rad   = NAN;
+          s.accel_fwd_g = a_fwd_g;
+          s.omega_imu   = take_gyro(gR, G.fwd_axis_R);
+          s.imu_sat     = (fabsf(a_fwd_g)>3.0f) || (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
+          Aquiles::Detection::pushSample(Aquiles::Detection::Leg::R, s);
+        }
+
+        vTaskDelay(per);
+      }
+    }
+
+    void startTask(){
+      xTaskCreatePinnedToCore(vTaskIMU, "IMU", 4096, nullptr, 3, nullptr, 0);
+    }
+
+    } // namespace IMU
     namespace Power {
 
       // ---- PINS (ajustá a tu placa) ----
