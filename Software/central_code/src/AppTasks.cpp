@@ -344,7 +344,7 @@ namespace Aquiles {
     HardwareSerial& U_R = Serial2;
 
     // =================== Protocolo (idéntico a SPI) ===================
-    static constexpr uint8_t PROTO_VERSION = 0x01;
+    static constexpr uint8_t PROTO_VERSION_V2 = 0x02; // telemetría nueva (20B
     static constexpr uint8_t ACT_SOF       = 0x5A;
     static constexpr uint8_t TEL_SOF       = 0xA5;
     static constexpr size_t  ACT_SIZE      = 16;
@@ -365,19 +365,22 @@ namespace Aquiles {
       uint16_t limits;
       uint8_t  rsv1, crc8; // rsv1 sin uso en modo dual-bus
     };
-    struct TelemetryFrameV1 {
+
+    struct TelemetryFrameV2 {
       uint8_t  sof, version, len, seq;
       uint32_t t_us;
       uint16_t flags, sample_hz;
       int16_t  enc_q15;
-      int16_t  mpu_ax_q14, mpu_ay_q14, mpu_az_q14;
-      int16_t  mpu_gx_q14, mpu_gy_q14, mpu_gz_q14;
-      uint16_t err_code, frame_ctr;
-      uint8_t  reserved[5], crc8; // reserved[0] sin uso en modo dual-bus
+      int16_t  ipeak_q15;
+      uint8_t  phase_peak;
+      uint16_t frame_ctr;
+      uint8_t  crc8;
     };
     #pragma pack(pop)
 
-    // ===== Utilitarios =====
+    static constexpr size_t TEL2_SIZE      = sizeof(TelemetryFrameV2); // 20
+    static constexpr uint8_t TEL2_LEN      = TEL2_SIZE - 1;
+        // ===== Utilitarios =====
     static uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init){
       uint8_t crc = init;
       for (size_t i = 0; i < len; ++i) {
@@ -393,18 +396,21 @@ namespace Aquiles {
 
     static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s){
       memset(&c, 0, sizeof(c));
-      c.sof = ACT_SOF;  c.version = PROTO_VERSION;  c.len = ACT_SIZE - 1;
+      c.sof = ACT_SOF;  c.version = PROTO_VERSION_V2;  c.len = ACT_SIZE - 1;
       c.seq = seq;
       c.mode = 2; // VELOCITY
       c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s);   
       c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1, 0x00);
     }
-    static bool validateTelemetry(const TelemetryFrameV1& f){
-      if (f.sof!=TEL_SOF || f.version!=PROTO_VERSION || f.len!=TEL_LEN_FIELD) return false;
-      uint8_t calc = crc8_sum(reinterpret_cast<const uint8_t*>(&f), TEL_SIZE - 1, 0x00);
+    static bool validateTelemetryV2(const uint8_t* buf, size_t n){
+      if (n != TEL2_SIZE) return false;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      if (f.sof != TEL_SOF) return false;
+      if (f.version != PROTO_VERSION_V2) return false;
+      if (f.len != TEL2_LEN) return false;
+      uint8_t calc = crc8_sum(buf, TEL2_SIZE - 1, 0x00);
       return (calc == f.crc8);
     }
-
     // ==== SLIP helpers ====
     static void slip_write_byte(HardwareSerial& U, uint8_t b){
       if (b==SLIP_END){ U.write(SLIP_ESC); U.write(SLIP_ESC_END); }
@@ -449,7 +455,7 @@ namespace Aquiles {
 
     static void ctx_slip_feed(LinkCtx& C, uint8_t b, SlipFrameHandler onFrame){
       if (b == SLIP_END){
-        if (C.rx_in_frame && C.rx_len >= TEL_SIZE){
+        if (C.rx_in_frame && C.rx_len >= TEL2_SIZE){
           if (onFrame) onFrame(C.rx_buf, C.rx_len);
         }
         C.rx_len = 0;
@@ -478,17 +484,17 @@ namespace Aquiles {
     static uint32_t hold_until_L_ms = 0;
     static uint32_t hold_until_R_ms = 0;
 
-    static void ingestTelemetry_fixedLeg(const TelemetryFrameV1& f, Aquiles::Detection::Leg leg){
+    static void ingestTelemetryV2(const TelemetryFrameV2& f, Aquiles::Detection::Leg leg){
       Aquiles::Detection::SampleIn s{};
       s.ts_us       = f.t_us;
       s.theta_rad   = q15_to_rad(f.enc_q15);
-
-      // Ahora IMU por I2C: NO toco accel aquí
-      s.accel_fwd_g = NAN;          // <--- importante
-      s.imu_sat     = false;        // o según flags si te interesa
+      s.accel_fwd_g = NAN;      // IMU viene por I2C
+      s.imu_sat     = false;
 
       Aquiles::Detection::pushSample(leg, s);
 
+      // OC → hold y clamp de referencia
+      static constexpr uint16_t FLAG_OC = (1u<<0);
       if (f.flags & FLAG_OC){
         uint32_t t = now_ms();
         if (leg==Aquiles::Detection::Leg::L) hold_until_L_ms = t + 200;
@@ -496,20 +502,17 @@ namespace Aquiles {
         Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
       }
     }
-
     static void on_slip_frame_L(uint8_t* buf, size_t n){
-      if (n != TEL_SIZE) return;
-      TelemetryFrameV1 f; memcpy(&f, buf, TEL_SIZE);
-      if (!validateTelemetry(f)) return;
-      ingestTelemetry_fixedLeg(f, Aquiles::Detection::Leg::L);
-    }
-    static void on_slip_frame_R(uint8_t* buf, size_t n){
-      if (n != TEL_SIZE) return;
-      TelemetryFrameV1 f; memcpy(&f, buf, TEL_SIZE);
-      if (!validateTelemetry(f)) return;
-      ingestTelemetry_fixedLeg(f, Aquiles::Detection::Leg::R);
+      if (!validateTelemetryV2(buf, n)) return;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      ingestTelemetryV2(f, Aquiles::Detection::Leg::L);
     }
 
+    static void on_slip_frame_R(uint8_t* buf, size_t n){
+      if (!validateTelemetryV2(buf, n)) return;
+      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+      ingestTelemetryV2(f, Aquiles::Detection::Leg::R);
+    }
     // ===== Tasks =====
     static void vTxTask(void* pv){
       LinkCtx* C = static_cast<LinkCtx*>(pv);
