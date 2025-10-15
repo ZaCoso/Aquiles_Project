@@ -225,11 +225,42 @@ namespace Aquiles {
     } // namespace Detection
     // ================= BLE =================
     namespace BLE {
-        NimBLECharacteristic* pCharacteristic = nullptr;
+        BLECharacteristic* pCharacteristic = nullptr;
         volatile bool deviceConnected = false;
         std::string lastValue = "0";
+        // ===== Telemetría binaria BLE v1 =====
+        #pragma pack(push,1)
+        struct TelemetryBLEv1 {
+          uint8_t  sof;       // 0xD1
+          uint8_t  ver;       // 0x01
+          uint8_t  len;       // sizeof(TelemetryBLEv1)-1
+          uint8_t  seq;       // ++
+          uint32_t t_ms;      // millis()
+          int16_t  thL_q15;   // rad -> q15: x * 32768/(2π)
+          int16_t  wL_q15;    // rad/s -> q15: x * 2048
+          int16_t  aL_q14;    // g -> q14: x * 16384
+          int16_t  thR_q15;
+          int16_t  wR_q15;
+          int16_t  aR_q14;
+          uint16_t soc_q10;   // % -> q10: x * 1024
+          uint16_t socMin_q10;
+          uint16_t flags;     // bit0=OC (si lo usás), bit1=ESTOP
+          uint8_t  rsv0;
+          uint8_t  crc8;      // poly 0x07 sobre todo excepto crc
+        };
+        #pragma pack(pop)
 
-        void MyCallbacks::onWrite(NimBLECharacteristic* pChar) {
+        static inline int16_t _ble_rad_to_q15(float x){ return (int16_t)lrintf(x * (32768.0f/(2.0f*(float)M_PI))); }
+        static inline int16_t _ble_vel_to_q15(float x){ return (int16_t)lrintf(x * 2048.0f); }
+        static inline int16_t _ble_g_to_q14  (float x){ return (int16_t)lrintf(x * 16384.0f); }
+        static inline uint16_t _ble_pct_to_q10(float x){ float p = (x<0?0:(x>100?100:x)); return (uint16_t)lrintf(p * 1024.0f); }
+
+        static uint8_t _ble_crc8_07(const uint8_t* data, size_t n, uint8_t init=0x00){
+          uint8_t c=init;
+          for(size_t i=0;i<n;i++){ c^=data[i]; for(int k=0;k<8;k++) c=(c&0x80)?(uint8_t)((c<<1)^0x07):(uint8_t)(c<<1); }
+          return c;
+        }
+        void MyCallbacks::onWrite(BLECharacteristic* pChar) {
             std::string value = std::string(pChar->getValue().c_str());
             if (!value.empty()) {
                 Serial.print("Recibido via BLE: ");
@@ -238,36 +269,37 @@ namespace Aquiles {
             }
         }
 
-        void MyServerCallbacks::onConnect(NimBLEServer* /*pServer*/) {
+        void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
             deviceConnected = true;
             Serial.println("Dispositivo conectado");
+            BLEDevice::startAdvertising();
         }
 
-        void MyServerCallbacks::onDisconnect(NimBLEServer* /*pServer*/) {
+        void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
             deviceConnected = false;
             Serial.println("Dispositivo desconectado");
         }
 
         void init() {
-            NimBLEDevice::init(DEVICE_NAME);
+            BLEDevice::init(DEVICE_NAME);
 
-            NimBLEServer* pServer = NimBLEDevice::createServer();
+            BLEServer* pServer = BLEDevice::createServer();
             pServer->setCallbacks(new MyServerCallbacks());
 
-            NimBLEService* pService = pServer->createService(SERVICE_UUID);
+            BLEService* pService = pServer->createService(SERVICE_UUID);
 
             pCharacteristic = pService->createCharacteristic(
                 CHARACTERISTIC_UUID,
-                NIMBLE_PROPERTY::READ |
-                NIMBLE_PROPERTY::WRITE |
-                NIMBLE_PROPERTY::NOTIFY
+                BLECharacteristic::PROPERTY_READ   |
+                BLECharacteristic::PROPERTY_NOTIFY |
+                BLECharacteristic::PROPERTY_WRITE
             );
 
             pCharacteristic->setValue("0");
             pCharacteristic->setCallbacks(new MyCallbacks());
             pService->start();
 
-            NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+            BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
             pAdvertising->addServiceUUID(SERVICE_UUID);
             pAdvertising->setScanResponse(true);
             pAdvertising->start();
@@ -298,16 +330,52 @@ namespace Aquiles {
             Serial.print("Enviado: ");
             Serial.println(msg);
         }
-
         void TaskNotify(void* /*pv*/) {
-            const TickType_t period = pdMS_TO_TICKS(3000);
-            for (;;) {
-                if (deviceConnected) {
-                    enviarEstado();
-                    Serial.println(lastValue.c_str());
-                }
-                vTaskDelay(period);
+          // Intentar MTU alto para notificar frames largos de una sola vez
+          BLEDevice::setMTU(185);
+
+          uint8_t seq = 0;
+          const TickType_t period = pdMS_TO_TICKS(50); // 20 Hz
+
+          for (;;) {
+            if (deviceConnected && pCharacteristic) {
+              // Tomamos señales de la capa Detection
+              auto sL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
+              auto sR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
+
+              TelemetryBLEv1 f{};
+              f.sof  = 0xD1;
+              f.ver  = 0x01;
+              f.len  = sizeof(TelemetryBLEv1)-1;
+              f.seq  = ++seq;
+              f.t_ms = millis();
+
+              f.thL_q15 = _ble_rad_to_q15(sL.theta);
+              f.wL_q15  = _ble_vel_to_q15(sL.omega);
+              f.aL_q14  = _ble_g_to_q14  (sL.a_fwd_g);
+
+              f.thR_q15 = _ble_rad_to_q15(sR.theta);
+              f.wR_q15  = _ble_vel_to_q15(sR.omega);
+              f.aR_q14  = _ble_g_to_q14  (sR.a_fwd_g);
+
+              float soc    = Aquiles::Power::getPackSOC();
+              float socMin = Aquiles::Power::getPackSOCmin();
+              f.soc_q10    = _ble_pct_to_q10(soc);
+              f.socMin_q10 = _ble_pct_to_q10(socMin);
+
+              // Flags
+              f.flags = 0;
+              if (Aquiles::Safety::triggered()) f.flags |= (1u<<1);
+              // si querés propagar OC desde otro lado, OR bit0 acá
+
+              f.crc8 = _ble_crc8_07(reinterpret_cast<const uint8_t*>(&f), sizeof(TelemetryBLEv1)-1, 0x00);
+
+              // Notificar
+              pCharacteristic->setValue(reinterpret_cast<uint8_t*>(&f), sizeof(f));
+              pCharacteristic->notify();
             }
+            vTaskDelay(period);
+          }
         }
     }
 

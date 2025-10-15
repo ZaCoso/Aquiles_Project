@@ -3,8 +3,13 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <SPI.h>
-#include <NimBLEDevice.h>
+#include <Wire.h>
 #include <Adafruit_MPU6050.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
 #include <Adafruit_Sensor.h>
 namespace Aquiles {
 
@@ -128,17 +133,17 @@ namespace Aquiles {
     } // namespace Detection
     namespace 
     BLE {
-        extern NimBLECharacteristic* pCharacteristic;
+        extern BLECharacteristic* pCharacteristic;
         extern volatile bool deviceConnected;
         extern std::string lastValue;
 
-        class MyCallbacks : public NimBLECharacteristicCallbacks {
-            void onWrite(NimBLECharacteristic* pCharacteristic) override;
+        class MyCallbacks : public BLECharacteristicCallbacks {
+            void onWrite(BLECharacteristic* pCharacteristic) override;
         };
 
-        class MyServerCallbacks : public NimBLEServerCallbacks {
-            void onConnect(NimBLEServer* pServer) override;
-            void onDisconnect(NimBLEServer* pServer) override;
+        class MyServerCallbacks : public BLEServerCallbacks {
+            void onConnect(BLEServer* pServer) override;
+            void onDisconnect(BLEServer* pServer) override;
         };
 
         void init();
