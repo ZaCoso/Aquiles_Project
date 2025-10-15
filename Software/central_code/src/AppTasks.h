@@ -18,14 +18,6 @@ namespace Aquiles {
     constexpr const char* SERVICE_UUID      = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
     constexpr const char* CHARACTERISTIC_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
-    // ====== Pines SPI ======
-    constexpr int PIN_SCK   = 18;
-    constexpr int PIN_MISO  = 19;
-    constexpr int PIN_MOSI  = 23;
-
-    // ====== Chip Selects ======
-    constexpr int CS_RP2040 = 5;
-    constexpr int CS_DEV_B  = 15;
 
     // ====== Stack & Priority ======
     constexpr uint16_t tskINIT_STACK      = configMINIMAL_STACK_SIZE;
