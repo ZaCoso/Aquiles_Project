@@ -272,7 +272,7 @@ namespace Aquiles {
         void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
             deviceConnected = true;
             Serial.println("Dispositivo conectado");
-            BLEDevice::startAdvertising();
+            // BLEDevice::startAdvertising();
         }
 
         void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
@@ -304,7 +304,7 @@ namespace Aquiles {
             BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
             pAdvertising->addServiceUUID(SERVICE_UUID);
             pAdvertising->setScanResponse(true);
-            // pAdvertising->start();
+            pAdvertising->start();
 
             Serial.println("ESP32 BLE listo para conexiones");
 

@@ -14,7 +14,7 @@
 namespace Aquiles {
 
     // ====== Config BLE ======
-    constexpr const char* DEVICE_NAME       = "Aquiles X1";
+    constexpr const char* DEVICE_NAME       = "Aquiles x1";
     constexpr const char* SERVICE_UUID      = "6e400010-b5a3-f393-e0a9-e50e24dcca9e";
     constexpr const char* CHARACTERISTIC_UUID = "6e400020-b5a3-f393-e0a9-e50e24dcca9e";
 
