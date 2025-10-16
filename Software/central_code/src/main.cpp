@@ -17,7 +17,7 @@ void setup() {
     icfg.fwd_sign_L = +1;          // ajustá según montaje real
     icfg.fwd_sign_R = +1;
 
-    Aquiles::IMU::init(icfg, &Wire /*o &Wire1 si usás ese bus*/);
+    Aquiles::IMU::init(icfg, &Wire1 /*o &Wire1 si usás ese bus*/);
     Aquiles::IMU::startTask();
 
     BLE::init();

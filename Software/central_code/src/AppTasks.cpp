@@ -708,7 +708,7 @@ namespace Aquiles {
 
       // Arrancar I2C (si no está ya)
       // En ESP32 puedes especificar pines si lo necesitás: W->begin(SDApin, SCLpin, freq);
-      W->begin();
+      W->begin(8, 18, 400000); 
 
       // Intentar begin para ambos
       hasL = mpuL.begin(G.addr_L, W);
