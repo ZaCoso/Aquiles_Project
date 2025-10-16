@@ -108,7 +108,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           child: Center(
             child: SingleChildScrollView(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16),
+                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 14),
               child: FadeTransition(
                 opacity: _fadeAnimation,
                 child: Column(
@@ -117,8 +117,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     // Logo
                     Image.asset(
                       'assets/images/logo.png',
-                      width: 200,
-                      height: 200,
+                      width: 72,
+                      height: 72,
                     ),
                     const SizedBox(height: 28),
 
@@ -231,13 +231,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                                         _emailController.text,
                                         _passwordController.text,
                                       );
-                                  // If signIn is successful, AuthChecker should navigate.
-                                  // If the widget is still mounted, reset loading state.
-                                  if (mounted) {
-                                    setState(() {
-                                      _isLoading = false;
-                                    });
-                                  }
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _isLoading = false;
+                                  });
+                                  Navigator.of(context)
+                                      .pushNamed('/instructions');
                                 } catch (e) {
                                   if (mounted) {
                                     setState(() {
