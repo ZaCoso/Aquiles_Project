@@ -223,165 +223,177 @@ namespace Aquiles {
       }
 
     } // namespace Detection
-    // ================= BLE =================
+        // ================= BLE =================
     namespace BLE {
-        BLECharacteristic* pCharacteristic = nullptr;
-        volatile bool deviceConnected = false;
-        std::string lastValue = "0";
-        // ===== Telemetría binaria BLE v1 =====
-        #pragma pack(push,1)
-        struct TelemetryBLEv1 {
-          uint8_t  sof;       // 0xD1
-          uint8_t  ver;       // 0x01
-          uint8_t  len;       // sizeof(TelemetryBLEv1)-1
-          uint8_t  seq;       // ++
-          uint32_t t_ms;      // millis()
-          int16_t  thL_q15;   // rad -> q15: x * 32768/(2π)
-          int16_t  wL_q15;    // rad/s -> q15: x * 2048
-          int16_t  aL_q14;    // g -> q14: x * 16384
-          int16_t  thR_q15;
-          int16_t  wR_q15;
-          int16_t  aR_q14;
-          uint16_t soc_q10;   // % -> q10: x * 1024
-          uint16_t socMin_q10;
-          uint16_t flags;     // bit0=OC (si lo usás), bit1=ESTOP
-          uint8_t  rsv0;
-          uint8_t  crc8;      // poly 0x07 sobre todo excepto crc
-        };
-        #pragma pack(pop)
 
-        static inline int16_t _ble_rad_to_q15(float x){ return (int16_t)lrintf(x * (32768.0f/(2.0f*(float)M_PI))); }
-        static inline int16_t _ble_vel_to_q15(float x){ return (int16_t)lrintf(x * 2048.0f); }
-        static inline int16_t _ble_g_to_q14  (float x){ return (int16_t)lrintf(x * 16384.0f); }
-        static inline uint16_t _ble_pct_to_q10(float x){ float p = (x<0?0:(x>100?100:x)); return (uint16_t)lrintf(p * 1024.0f); }
+      // ===== Punteros a características (definiciones) =====
+      BLECharacteristic* chIMU_L = nullptr;
+      BLECharacteristic* chIMU_R = nullptr;
+      BLECharacteristic* chENC_L = nullptr;
+      BLECharacteristic* chENC_R = nullptr;
+      BLECharacteristic* chF_3   = nullptr;
 
-        static uint8_t _ble_crc8_07(const uint8_t* data, size_t n, uint8_t init=0x00){
-          uint8_t c=init;
-          for(size_t i=0;i<n;i++){ c^=data[i]; for(int k=0;k<8;k++) c=(c&0x80)?(uint8_t)((c<<1)^0x07):(uint8_t)(c<<1); }
-          return c;
+      volatile bool deviceConnected = false;
+      std::string lastValue = "0";
+
+      // ===== Tipos de payload compactos =====
+      #pragma pack(push,1)
+      struct IMU6F  { float ax, ay, az, gx, gy, gz; };
+      struct ONEF   { float a; };
+      struct THREEF { float a, b, c; };
+      #pragma pack(pop)
+
+      // ===== Callbacks =====
+      // Implementación de métodos declarados en AppTasks.h
+      void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
+        std::string value = std::string(pCharacteristic->getValue().c_str());
+        if (!value.empty()) {
+          Serial.print("Recibido via BLE: ");
+          Serial.println(value.c_str());
+          lastValue = value;
         }
-        void MyCallbacks::onWrite(BLECharacteristic* pChar) {
-            std::string value = std::string(pChar->getValue().c_str());
-            if (!value.empty()) {
-                Serial.print("Recibido via BLE: ");
-                Serial.println(value.c_str());
-                lastValue = value;
-            }
-        }
+      }
 
-        void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
-            deviceConnected = true;
-            Serial.println("Dispositivo conectado");
-            // BLEDevice::startAdvertising();
-        }
+      void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
+        deviceConnected = true;
+        Serial.println("Dispositivo conectado");
+      }
 
-        void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
-            deviceConnected = false;
-            Serial.println("Dispositivo desconectado");
-        }
+      void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
+        deviceConnected = false;
+        Serial.println("Dispositivo desconectado");
+      }
 
-        void init() {
-            BLEDevice::init(DEVICE_NAME);
+      // ===== Helper para crear características READ+NOTIFY (y opcional WRITE) =====
+      static BLECharacteristic* mkChr(BLEService* svc, const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
+        uint32_t props = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY;
+        if (writable) props |= BLECharacteristic::PROPERTY_WRITE;
+        BLECharacteristic* ch = svc->createCharacteristic(uuid, props);
 
-            BLEServer* pServer = BLEDevice::createServer();
-            pServer->setCallbacks(new MyServerCallbacks());
+        // CCCD (iOS necesita descriptor para habilitar notify)
+        auto* cccd = new BLE2902();
+        cccd->setNotifications(true);
+        ch->addDescriptor(cccd);
 
-            BLEService* pService = pServer->createService(SERVICE_UUID);
+        if (cbs) ch->setCallbacks(cbs);
+        return ch;
+      }
 
-            pCharacteristic = pService->createCharacteristic(
-                CHARACTERISTIC_UUID,
-                BLECharacteristic::PROPERTY_READ   |
-                BLECharacteristic::PROPERTY_NOTIFY |
-                BLECharacteristic::PROPERTY_WRITE
-            );
+      // ====== Tarea de notificaciones periódicas ======
+      void TaskNotify(void*) {
+        // MTU grande para permitir payloads de hasta ~180 bytes si hiciera falta
+        BLEDevice::setMTU(185);
+        const TickType_t period = pdMS_TO_TICKS(50); // 20 Hz
+        for (;;) {
+          if (deviceConnected) {
+            // --- Señales derivadas ---
+            const auto& SL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
+            const auto& SR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
 
-            pCharacteristic->setValue("0");
-            pCharacteristic->setCallbacks(new MyCallbacks());
-            auto *cccd = new BLE2902();
-            cccd->setNotifications(true);      // habilita notificaciones por defecto
-            pCharacteristic->addDescriptor(cccd);
-            pService->start();
-            BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
-            pAdvertising->addServiceUUID(SERVICE_UUID);
-            pAdvertising->setScanResponse(true);
-            pAdvertising->start();
-
-            Serial.println("ESP32 BLE listo para conexiones");
-
-            xTaskCreatePinnedToCore(
-                TaskNotify,
-                "BLE_NOTIFY",
-                4096,
-                nullptr,
-                1,
-                nullptr,
-                1
-            );
-        }
-
-        void enviarEstado() {
-            float pavg = Aquiles::Power::getPackSOC();
-            char msg[96];
-            snprintf(msg, sizeof(msg), "BAT:avg=%.1f",pavg);
-
-            if (pCharacteristic) {
-                pCharacteristic->setValue(msg);
-                pCharacteristic->notify();
+            // ===== Encoder L =====
+            if (chENC_L) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "EncL: %.2f rad", SL.theta);
+              chENC_L->setValue(msg);
+              chENC_L->notify();
             }
 
-            Serial.print("Enviado: ");
-            Serial.println(msg);
-        }
-        void TaskNotify(void* /*pv*/) {
-          // Intentar MTU alto para notificar frames largos de una sola vez
-          BLEDevice::setMTU(185);
-
-          uint8_t seq = 0;
-          const TickType_t period = pdMS_TO_TICKS(50); // 20 Hz
-
-          for (;;) {
-            if (deviceConnected && pCharacteristic) {
-              enviarEstado();
-              // Tomamos señales de la capa Detection
-              // auto sL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
-              // auto sR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
-
-              // TelemetryBLEv1 f{};
-              // f.sof  = 0xD1;
-              // f.ver  = 0x01;
-              // f.len  = sizeof(TelemetryBLEv1)-1;
-              // f.seq  = ++seq;
-              // f.t_ms = millis();
-
-              // f.thL_q15 = _ble_rad_to_q15(sL.theta);
-              // f.wL_q15  = _ble_vel_to_q15(sL.omega);
-              // f.aL_q14  = _ble_g_to_q14  (sL.a_fwd_g);
-
-              // f.thR_q15 = _ble_rad_to_q15(sR.theta);
-              // f.wR_q15  = _ble_vel_to_q15(sR.omega);
-              // f.aR_q14  = _ble_g_to_q14  (sR.a_fwd_g);
-
-              // float soc    = Aquiles::Power::getPackSOC();
-              // float socMin = Aquiles::Power::getPackSOCmin();
-              // f.soc_q10    = _ble_pct_to_q10(soc);
-              // f.socMin_q10 = _ble_pct_to_q10(socMin);
-
-              // // Flags
-              // f.flags = 0;
-              // if (Aquiles::Safety::triggered()) f.flags |= (1u<<1);
-              // // si querés propagar OC desde otro lado, OR bit0 acá
-
-              // f.crc8 = _ble_crc8_07(reinterpret_cast<const uint8_t*>(&f), sizeof(TelemetryBLEv1)-1, 0x00);
-
-              // // Notificar
-              // pCharacteristic->setValue(reinterpret_cast<uint8_t*>(&f), sizeof(f));
-              // pCharacteristic->notify();
+            // ===== Encoder R =====
+            if (chENC_R) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "EncR: %.2f rad", SR.theta);
+              chENC_R->setValue(msg);
+              chENC_R->notify();
             }
-            vTaskDelay(period);
+
+            // ===== IMU L =====
+            if (chIMU_L) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "IMUL: a=%.2fg w=%.2f", SL.a_fwd_g, SL.omega);
+              chIMU_L->setValue(msg);
+              chIMU_L->notify();
+            }
+
+            // ===== IMU R =====
+            if (chIMU_R) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "IMUR: a=%.2fg w=%.2f", SR.a_fwd_g, SR.omega);
+              chIMU_R->setValue(msg);
+              chIMU_R->notify();
+            }
+
+
+            if (chF_3) {
+              char msg[32];
+              float c1 = Power::getCellV(0);
+              float c2 = Power::getCellV(1);
+              float c3 = Power::getCellV(2);
+              float c4 = Power::getCellV(3);
+              snprintf(msg, sizeof(msg), "C1=%.3fV C2=%.3fV C3=%.3fV C4=%.3fV\n", c1,c2,c3,c4);
+              chF_3->setValue(msg);
+              chF_3->notify();
+            }
           }
+          vTaskDelay(period);
         }
-    }
+      }
 
+      // ====== Inicialización BLE (servicio + características + task) ======
+      void init() {
+        // IMPORTANTE: DEVICE_NAME debe existir (lo tenés como "Aquiles X1" en tu código)
+        BLEDevice::init(DEVICE_NAME);
+
+        BLEServer* pServer = BLEDevice::createServer();
+        pServer->setCallbacks(new MyServerCallbacks());
+
+        BLEService* pService = pServer->createService(SERVICE_UUID);
+
+        // Crear características exactamente con tus UUIDs
+        chIMU_L = mkChr(pService, CHR_IMU_L_UUID);
+        chIMU_R = mkChr(pService, CHR_IMU_R_UUID);
+        chENC_L = mkChr(pService, CHR_ENC_L_UUID);
+        chENC_R = mkChr(pService, CHR_ENC_R_UUID);
+        chF_3   = mkChr(pService, CHR_F_3_UUID);
+
+        // Valores iniciales (cero seguro)
+        {
+          IMU6F  z6{}; ONEF z1{}; THREEF z3{};
+          if (chIMU_L) chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
+          if (chIMU_R) chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
+          if (chENC_L) chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
+          if (chENC_R) chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
+          if (chF_3)   chF_3  ->setValue((uint8_t*)&z3, sizeof(z3));
+        }
+
+        pService->start();
+
+        BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+        pAdvertising->addServiceUUID(SERVICE_UUID);
+        pAdvertising->setScanResponse(true);
+        pAdvertising->start();
+
+        Serial.println("[BLE] Servicio listo y anunciando");
+
+        // Task de notificación
+        xTaskCreatePinnedToCore(
+          TaskNotify, "BLE_NOTIFY",
+          4096, nullptr,
+          1, nullptr,
+          1  // core 1 como en tu estilo
+        );
+      }
+
+      // ====== “enviarEstado” minimalista (usa chF_3: 3 floats) ======
+      void enviarEstado() {
+        if (!deviceConnected || !chF_3) return;
+        THREEF f3{ Aquiles::Power::getPackSOC(),
+                  Aquiles::Power::getPackSOCmin(),
+                  1.0f /* placeholder “health” */ };
+        chF_3->setValue((uint8_t*)&f3, sizeof(f3));
+        chF_3->notify();
+      }
+
+    } // namespace BLE
     // ================= TAREAS BÁSICAS =================
     namespace Tasks {
         void Init(void* /*params*/) {
@@ -774,111 +786,67 @@ namespace Aquiles {
       static constexpr int ADC_C4_PIN = 4;   // tap celda 4 (V_C4)
 
       // ---- ADC params ----
-      static constexpr float VREF = 3.300f;   // referencia ADC efectiva (calibrar)
-      static constexpr int   ADC_MAX = 4095;  // 12 bits
+      static constexpr float VREF   = 3.300f;   // referencia ADC efectiva (calibrar)
+      static constexpr int   ADC_MAX= 4095;     // 12 bits
 
-      // ---- Divisores (TU ESQUEMA) ----
-      // Cada tap mide "pack parcial hasta esa celda" vs GND con un divisor distinto:
-      // Vadc = Vtap * Rbottom/(Rtop+Rbottom)  => Vtap = Vadc * (Rtop+Rbottom)/Rbottom
-      // Rbottom es 2.2k en los 4; Rtop es 1.2k, 4.3k, 8.2k, 12k respectivamente.
+      // ---- Divisores (tu esquema) ----
+      // Vtap = Vadc * (Rtop+Rbot)/Rbot
       static constexpr float Rbot[4] = {2200.0f, 2200.0f, 2200.0f, 2200.0f};
       static constexpr float Rtop[4] = {1200.0f, 4300.0f, 8200.0f,12000.0f};
 
       // ---- Calibración por tap (ganancia/offset) ----
-      // Ajustá estos luego de medir con multímetro (gain ~1.0, offs ~0.0 V).
       struct Cal { float gain; float offs; };
       static Cal CAL[4] = {
         {1.000f, 0.000f}, {1.000f, 0.000f}, {1.000f, 0.000f}, {1.000f, 0.000f}
       };
 
       // ---- Estado filtrado ----
-      static float tap_V[4]   = {0,0,0,0};   // voltaje real en cada tap (V_C1..V_C4)
-      static float cell_V[4]  = {0,0,0,0};   // voltaje por celda
-      static float cell_SOC[4]= {0,0,0,0};   // % por celda
-      static float pack_SOC   = 0.0f;        // promedio
-      static float pack_SOC_min = 0.0f;      // mínimo (conservador)
+      static float tap_V[4]  = {0,0,0,0};   // V en cada tap (total hasta la celda N)
+      static float cell_V[4] = {0,0,0,0};   // V por celda (C1..C4)
       static SemaphoreHandle_t mtx = nullptr;
 
-      // ---- LUT OCV → % (temperatura ambiente, reposo/carga liviana) ----
-      struct Pt { float v, soc; };
-      static const Pt LUT[] = {
-        {4.20f,100},{4.15f,95},{4.10f,90},{4.05f,85},{4.00f,80},
-        {3.95f,70},{3.90f,60},{3.85f,50},{3.80f,40},{3.75f,30},
-        {3.70f,20},{3.65f,12},{3.60f,8},{3.55f,5},{3.50f,3},
-        {3.45f,2},{3.40f,1},{3.30f,0}
-      };
-      static constexpr int LUTN = sizeof(LUT)/sizeof(LUT[0]);
+      // ---- Filtro / periodo ----
+      static constexpr float     EMA_A   = 0.30f;                 // alisado
+      static constexpr TickType_t PERIOD = pdMS_TO_TICKS(200);    // 5 Hz
 
-      static inline float soc_from_v(float v){
-        if (v >= LUT[0].v) return 100.0f;
-        if (v <= LUT[LUTN-1].v) return 0.0f;
-        for (int i=0;i<LUTN-1;i++){
-          if (v <= LUT[i].v && v >= LUT[i+1].v){
-            float t = (v - LUT[i+1].v) / (LUT[i].v - LUT[i+1].v);
-            return LUT[i+1].soc + t*(LUT[i].soc - LUT[i+1].soc);
-          }
-        }
-        return 0.0f;
-      }
-
+      // ===== Helpers =====
       static inline float ema(float x, float y, float a){ return a*x + (1.0f-a)*y; }
 
       static float readTapVolt_raw(int pin, int idx){
         uint16_t adc = analogRead(pin);
-        float vadc = (adc * VREF) / ADC_MAX;                           // V en el pin MCU
-        float vtap = vadc * (Rtop[idx] + Rbot[idx]) / Rbot[idx];       // V real en el tap
-        // Calibración por tap:
-        return CAL[idx].gain * vtap + CAL[idx].offs;
+        float vadc = (adc * VREF) / ADC_MAX;                      // V en pin MCU
+        float vtap = vadc * (Rtop[idx] + Rbot[idx]) / Rbot[idx];  // V reales en el tap
+        return CAL[idx].gain * vtap + CAL[idx].offs;              // calibrado
       }
 
       static void compute_cells_from_taps(){
-        // c1 = tap1
+        // c1 = tap1; c2 = tap2 - tap1; c3 = tap3 - tap2; c4 = tap4 - tap3
         cell_V[0] = tap_V[0];
-        // c2 = tap2 - tap1
         cell_V[1] = tap_V[1] - tap_V[0];
-        // c3 = tap3 - tap2
         cell_V[2] = tap_V[2] - tap_V[1];
-        // c4 = tap4 - tap3
         cell_V[3] = tap_V[3] - tap_V[2];
-
-        // Clamp por seguridad (evita negativos por ruido)
-        for (int i=0;i<4;i++){
-          if (cell_V[i] < 0.0f) cell_V[i] = 0.0f;
-        }
-      }
-
-      static void update_soc(){
-        float smin = 100.0f, ssum = 0.0f;
-        for (int i=0;i<4;i++){
-          cell_SOC[i] = soc_from_v(cell_V[i]);
-          ssum += cell_SOC[i];
-          if (cell_SOC[i] < smin) smin = cell_SOC[i];
-        }
-        pack_SOC = ssum / 4.0f;
-        pack_SOC_min = smin;
+        // clamp anti-ruido
+        for (int i=0;i<4;i++) if (cell_V[i] < 0.0f) cell_V[i] = 0.0f;
       }
 
       // ===== Tarea de muestreo/filtrado =====
       static void vTaskMon(void*){
-        const TickType_t period = pdMS_TO_TICKS(200);  // 5 Hz
         for(;;){
           float t1 = readTapVolt_raw(ADC_C1_PIN,0);
           float t2 = readTapVolt_raw(ADC_C2_PIN,1);
           float t3 = readTapVolt_raw(ADC_C3_PIN,2);
           float t4 = readTapVolt_raw(ADC_C4_PIN,3);
 
-          // EMA suave (a=0.3)
           if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
-          tap_V[0] = ema(t1, tap_V[0], 0.30f);
-          tap_V[1] = ema(t2, tap_V[1], 0.30f);
-          tap_V[2] = ema(t3, tap_V[2], 0.30f);
-          tap_V[3] = ema(t4, tap_V[3], 0.30f);
+          tap_V[0] = ema(t1, tap_V[0], EMA_A);
+          tap_V[1] = ema(t2, tap_V[1], EMA_A);
+          tap_V[2] = ema(t3, tap_V[2], EMA_A);
+          tap_V[3] = ema(t4, tap_V[3], EMA_A);
 
           compute_cells_from_taps();
-          update_soc();
           if (mtx) xSemaphoreGive(mtx);
 
-          vTaskDelay(period);
+          vTaskDelay(PERIOD);
         }
       }
 
@@ -888,19 +856,32 @@ namespace Aquiles {
         // (opcional) analogSetAttenuation(ADC_11db);
         if (!mtx) mtx = xSemaphoreCreateMutex();
         xTaskCreatePinnedToCore(vTaskMon, "BattMon", 3072, nullptr, 2, nullptr, 0);
-        Serial.println("[Power] Monitor de batería iniciado.");
+        Serial.println("[Power] Monitor de celdas iniciado.");
       }
 
-      // Seteo de calibración (ganancia/offset por tap)
+      // Ajuste de calibración (ganancia/offset por tap)
       void setCal(uint8_t tapIdx, float gain, float offs){
         if (tapIdx<4) { CAL[tapIdx].gain = gain; CAL[tapIdx].offs = offs; }
       }
 
-      // Getters thread-safe
-      float getCellV(uint8_t i){ float v=0; if (i<4){ if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); v=cell_V[i]; if(mtx) xSemaphoreGive(mtx);} return v; }
-      float getCellSOC(uint8_t i){ float s=0; if (i<4){ if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); s=cell_SOC[i]; if(mtx) xSemaphoreGive(mtx);} return s; }
-      float getPackSOC(){ float s; if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); s=pack_SOC; if(mtx) xSemaphoreGive(mtx); return s; }
-      float getPackSOCmin(){ float s; if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); s=pack_SOC_min; if(mtx) xSemaphoreGive(mtx); return s; }
+      // Getters thread-safe (Voltios)
+      float getCellV(uint8_t i){
+        float v=0;
+        if (i<4){ if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); v=cell_V[i]; if(mtx) xSemaphoreGive(mtx); }
+        return v;
+      }
 
-    } // namespace Power
+      // Helper para telemetría: devuelve mV enteros (C1..C4)
+      void fillCellMilliVolts(uint16_t out_mV[4]){
+        if(mtx) xSemaphoreTake(mtx,portMAX_DELAY);
+        for (int i=0;i<4;i++){
+          float mv = cell_V[i]*1000.0f;
+          if (mv < 0) mv = 0;
+          if (mv > 65535) mv = 65535; // saturación por seguridad
+          out_mV[i] = static_cast<uint16_t>(mv + 0.5f);
+        }
+        if(mtx) xSemaphoreGive(mtx);
+      }
+
+    } // namespace Power como uso esto
 } // namespace Aquiles

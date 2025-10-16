@@ -12,13 +12,20 @@
 
 #include <Adafruit_Sensor.h>
 namespace Aquiles {
+    inline constexpr char DEVICE_NAME[]= "Aquiles X1"; 
+    // ====== Config BLE ===
+    constexpr const char* SERVICE_UUID  = "6e400010-b5a3-f393-e0a9-e50e24dcca9e";
 
-    // ====== Config BLE ======
-    constexpr const char* DEVICE_NAME       = "Aquiles x1";
-    constexpr const char* SERVICE_UUID      = "6e400010-b5a3-f393-e0a9-e50e24dcca9e";
-    constexpr const char* CHARACTERISTIC_UUID = "6e400020-b5a3-f393-e0a9-e50e24dcca9e";
+    // IMU (6 floats c/u)
+    constexpr const char* CHR_IMU_L_UUID = "6e400021-b5a3-f393-e0a9-e50e24dcca9e";
+    constexpr const char* CHR_IMU_R_UUID = "6e400022-b5a3-f393-e0a9-e50e24dcca9e";
 
+    // Encoders (1 float c/u)  👇 nuevo nombre
+    constexpr const char* CHR_ENC_L_UUID = "6e400023-b5a3-f393-e0a9-e50e24dcca9e";
+    constexpr const char* CHR_ENC_R_UUID = "6e400024-b5a3-f393-e0a9-e50e24dcca9e";
 
+    // 3 floats
+    constexpr const char* CHR_F_3_UUID   = "6e400025-b5a3-f393-e0a9-e50e24dcca9e";
     // ====== Stack & Priority ======
     constexpr uint16_t tskINIT_STACK      = configMINIMAL_STACK_SIZE;
     constexpr uint16_t tskBLINK_STACK     = 4 * configMINIMAL_STACK_SIZE;
@@ -125,7 +132,11 @@ namespace Aquiles {
     } // namespace Detection
     namespace 
     BLE {
-        extern BLECharacteristic* pCharacteristic;
+        extern BLECharacteristic* chIMU_L;
+        extern BLECharacteristic* chIMU_R;
+        extern BLECharacteristic* chENC_L;   // antes chF_A
+        extern BLECharacteristic* chENC_R;   // antes chF_B
+        extern BLECharacteristic* chF_3;
         extern volatile bool deviceConnected;
         extern std::string lastValue;
 
