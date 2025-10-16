@@ -243,8 +243,10 @@ namespace DriverUART {
   }
 
   // ===================== Sensores reusables =====================
-  static inline float read_encoder_rad_noprint(){
+  static inline float read_encoder(){
     uint16_t raw = encoder_i2c.readAngle(); // 0..4095
+    Serial.print("angulo encoder: ");
+    Serial.println((raw*360 / 4096.0f));
     return (raw * (2.0f*M_PI)) / 4096.0f;
   }
 
@@ -418,7 +420,7 @@ void loop() {
     DriverUART::SensorSnap s{};
 
     // Encoder (sin prints)
-    s.enc_rad = DriverUART::read_encoder_rad_noprint();
+    s.enc_rad = DriverUART::read_encoder();
 
     // Corrientes
     DriverUART::read_currents_3ph(s.iA, s.iB, s.iC);
