@@ -297,12 +297,14 @@ namespace Aquiles {
 
             pCharacteristic->setValue("0");
             pCharacteristic->setCallbacks(new MyCallbacks());
+            auto *cccd = new BLE2902();
+            cccd->setNotifications(true);      // habilita notificaciones por defecto
+            pCharacteristic->addDescriptor(cccd);
             pService->start();
-
             BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
             pAdvertising->addServiceUUID(SERVICE_UUID);
             pAdvertising->setScanResponse(true);
-            pAdvertising->start();
+            // pAdvertising->start();
 
             Serial.println("ESP32 BLE listo para conexiones");
 
