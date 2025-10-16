@@ -165,10 +165,13 @@ namespace DriverUART {
     f.len      = TEL2_LEN;
     f.seq      = g_seq;
     f.t_us     = micros32();
-    f.flags    = s.overcurrent ? FLAG_OC : 0;
+    // f.flags    = s.overcurrent ? FLAG_OC : 0;
+    f.flags    = 0; // no usamos
     f.enc_q15  = rad_to_q15(s.enc_rad);
-    f.ipeak_q15= (int16_t)lrintf(s.i_peak * 1024.0f);
-    f.phase_peak = s.phase_peak;
+    // f.ipeak_q15= (int16_t)lrintf(s.i_peak * 1024.0f);
+    f.ipeak_q15 = 0; // no usamos
+    // f.phase_peak = s.phase_peak;
+    f.phase_peak = 0; // no usamos
     f.frame_ctr= (uint16_t)(g_frame_ctr & 0xFFFF);
     f.crc8     = crc8_0x07(reinterpret_cast<const uint8_t*>(&f), TEL2_SIZE-1, 0x00);
   }
