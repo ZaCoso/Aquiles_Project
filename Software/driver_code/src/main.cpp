@@ -479,7 +479,7 @@ void loop() {
   }
 
   // 8) Feedback visual
-  pixels.setPixelColor(0, pixels.Color(0, 255, 255));
+  pixels.setPixelColor(0, pixels.Color(178, 255, 255));
   pixels.show();
 
   // 9) Ritmo general
