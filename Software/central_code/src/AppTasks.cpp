@@ -225,7 +225,12 @@ namespace Aquiles {
     } // namespace Detection
     // ================= BLE =================
     namespace BLE {
-        BLECharacteristic* pCharacteristic = nullptr;
+        BLECharacteristic* chIMU_L = nullptr;
+        BLECharacteristic* chIMU_R = nullptr;
+        BLECharacteristic* chENC_L = nullptr;  // renamed
+        BLECharacteristic* chENC_R = nullptr;  // renamed
+        BLECharacteristic* chF_3   = nullptr;
+
         volatile bool deviceConnected = false;
         std::string lastValue = "0";
         // ===== Telemetría binaria BLE v1 =====
@@ -287,20 +292,40 @@ namespace Aquiles {
             pServer->setCallbacks(new MyServerCallbacks());
 
             BLEService* pService = pServer->createService(SERVICE_UUID);
+            // Helper para crear característica con READ+NOTIFY y CCCD (iOS-friendly)
+            auto mkChr = [&](const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
+              uint32_t props = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY;
+              if (writable) props |= BLECharacteristic::PROPERTY_WRITE;
 
-            pCharacteristic = pService->createCharacteristic(
-                CHARACTERISTIC_UUID,
-                BLECharacteristic::PROPERTY_READ   |
-                BLECharacteristic::PROPERTY_NOTIFY |
-                BLECharacteristic::PROPERTY_WRITE
-            );
+              BLECharacteristic* ch = pService->createCharacteristic(uuid, props);
 
-            pCharacteristic->setValue("0");
-            pCharacteristic->setCallbacks(new MyCallbacks());
-            auto *cccd = new BLE2902();
-            cccd->setNotifications(true);      // habilita notificaciones por defecto
-            pCharacteristic->addDescriptor(cccd);
+              // CCCD indispensable en iOS
+              auto* cccd = new BLE2902();
+              cccd->setNotifications(true);
+              ch->addDescriptor(cccd);
+
+              if (cbs) ch->setCallbacks(cbs);
+              return ch;
+            };
+
+            // Crea las 5 características
+            chIMU_L = mkChr(CHR_IMU_L_UUID);
+            chIMU_R = mkChr(CHR_IMU_R_UUID);
+            chENC_L = mkChr(CHR_ENC_L_UUID);
+            chENC_R = mkChr(CHR_ENC_R_UUID);
+            chF3    = mkChr(CHR_F3_UUID);
+            // (si quieres una RX desde el teléfono, crea otra con writable=true y setCallbacks(new MyCallbacks()))
+
+            // Valores iniciales (opcional, evita “empty” en primera lectura)
+            IMU6F z6{}; ONEF z1{}; THREEF z3{};
+            chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
+            chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
+            chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
+            chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
+            chF3   ->setValue((uint8_t*)&z3, sizeof(z3));
+            
             pService->start();
+
             BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
             pAdvertising->addServiceUUID(SERVICE_UUID);
             pAdvertising->setScanResponse(true);

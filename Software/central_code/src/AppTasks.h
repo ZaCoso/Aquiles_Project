@@ -132,7 +132,11 @@ namespace Aquiles {
     } // namespace Detection
     namespace 
     BLE {
-        extern BLECharacteristic* pCharacteristic;
+        extern BLECharacteristic* chIMU_L;
+        extern BLECharacteristic* chIMU_R;
+        extern BLECharacteristic* chENC_L;   // antes chF_A
+        extern BLECharacteristic* chENC_R;   // antes chF_B
+        extern BLECharacteristic* chF_3;
         extern volatile bool deviceConnected;
         extern std::string lastValue;
 
