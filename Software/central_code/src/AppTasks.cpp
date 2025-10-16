@@ -585,7 +585,7 @@ namespace Aquiles {
 
     } // namespace UARTDual
     namespace Safety {
-        constexpr int PIN_ESTOP = 8;          // ajustá a tu botón
+        constexpr int PIN_ESTOP = 39;          // ajustá a tu botón
         static volatile bool g_estop = false;
         void IRAM_ATTR isr_estop(){ g_estop = true; }
         void init(){
