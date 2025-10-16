@@ -223,190 +223,176 @@ namespace Aquiles {
       }
 
     } // namespace Detection
-    // ================= BLE =================
+        // ================= BLE =================
     namespace BLE {
-        BLECharacteristic* chIMU_L = nullptr;
-        BLECharacteristic* chIMU_R = nullptr;
-        BLECharacteristic* chENC_L = nullptr;  // renamed
-        BLECharacteristic* chENC_R = nullptr;  // renamed
-        BLECharacteristic* chF_3   = nullptr;
 
-        volatile bool deviceConnected = false;
-        std::string lastValue = "0";
-        // ===== Telemetría binaria BLE v1 =====
-        #pragma pack(push,1)
-        struct TelemetryBLEv1 {
-          uint8_t  sof;       // 0xD1
-          uint8_t  ver;       // 0x01
-          uint8_t  len;       // sizeof(TelemetryBLEv1)-1
-          uint8_t  seq;       // ++
-          uint32_t t_ms;      // millis()
-          int16_t  thL_q15;   // rad -> q15: x * 32768/(2π)
-          int16_t  wL_q15;    // rad/s -> q15: x * 2048
-          int16_t  aL_q14;    // g -> q14: x * 16384
-          int16_t  thR_q15;
-          int16_t  wR_q15;
-          int16_t  aR_q14;
-          uint16_t soc_q10;   // % -> q10: x * 1024
-          uint16_t socMin_q10;
-          uint16_t flags;     // bit0=OC (si lo usás), bit1=ESTOP
-          uint8_t  rsv0;
-          uint8_t  crc8;      // poly 0x07 sobre todo excepto crc
-        };
-        #pragma pack(pop)
+      // ===== Punteros a características (definiciones) =====
+      BLECharacteristic* chIMU_L = nullptr;
+      BLECharacteristic* chIMU_R = nullptr;
+      BLECharacteristic* chENC_L = nullptr;
+      BLECharacteristic* chENC_R = nullptr;
+      BLECharacteristic* chF_3   = nullptr;
 
-        static inline int16_t _ble_rad_to_q15(float x){ return (int16_t)lrintf(x * (32768.0f/(2.0f*(float)M_PI))); }
-        static inline int16_t _ble_vel_to_q15(float x){ return (int16_t)lrintf(x * 2048.0f); }
-        static inline int16_t _ble_g_to_q14  (float x){ return (int16_t)lrintf(x * 16384.0f); }
-        static inline uint16_t _ble_pct_to_q10(float x){ float p = (x<0?0:(x>100?100:x)); return (uint16_t)lrintf(p * 1024.0f); }
+      volatile bool deviceConnected = false;
+      std::string lastValue = "0";
 
-        static uint8_t _ble_crc8_07(const uint8_t* data, size_t n, uint8_t init=0x00){
-          uint8_t c=init;
-          for(size_t i=0;i<n;i++){ c^=data[i]; for(int k=0;k<8;k++) c=(c&0x80)?(uint8_t)((c<<1)^0x07):(uint8_t)(c<<1); }
-          return c;
+      // ===== Tipos de payload compactos =====
+      #pragma pack(push,1)
+      struct IMU6F  { float ax, ay, az, gx, gy, gz; };
+      struct ONEF   { float a; };
+      struct THREEF { float a, b, c; };
+      #pragma pack(pop)
+
+      // ===== Callbacks =====
+      // Implementación de métodos declarados en AppTasks.h
+      void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
+        std::string value = std::string(pCharacteristic->getValue().c_str());
+        if (!value.empty()) {
+          Serial.print("Recibido via BLE: ");
+          Serial.println(value.c_str());
+          lastValue = value;
         }
-        void MyCallbacks::onWrite(BLECharacteristic* pChar) {
-            std::string value = std::string(pChar->getValue().c_str());
-            if (!value.empty()) {
-                Serial.print("Recibido via BLE: ");
-                Serial.println(value.c_str());
-                lastValue = value;
-            }
-        }
+      }
 
-        void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
-            deviceConnected = true;
-            Serial.println("Dispositivo conectado");
-            // BLEDevice::startAdvertising();
-        }
+      void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
+        deviceConnected = true;
+        Serial.println("Dispositivo conectado");
+      }
 
-        void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
-            deviceConnected = false;
-            Serial.println("Dispositivo desconectado");
-        }
+      void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
+        deviceConnected = false;
+        Serial.println("Dispositivo desconectado");
+      }
 
-        void init() {
-            BLEDevice::init(DEVICE_NAME);
+      // ===== Helper para crear características READ+NOTIFY (y opcional WRITE) =====
+      static BLECharacteristic* mkChr(BLEService* svc, const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
+        uint32_t props = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY;
+        if (writable) props |= BLECharacteristic::PROPERTY_WRITE;
+        BLECharacteristic* ch = svc->createCharacteristic(uuid, props);
 
-            BLEServer* pServer = BLEDevice::createServer();
-            pServer->setCallbacks(new MyServerCallbacks());
+        // CCCD (iOS necesita descriptor para habilitar notify)
+        auto* cccd = new BLE2902();
+        cccd->setNotifications(true);
+        ch->addDescriptor(cccd);
 
-            BLEService* pService = pServer->createService(SERVICE_UUID);
-            // Helper para crear característica con READ+NOTIFY y CCCD (iOS-friendly)
-            auto mkChr = [&](const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
-              uint32_t props = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY;
-              if (writable) props |= BLECharacteristic::PROPERTY_WRITE;
+        if (cbs) ch->setCallbacks(cbs);
+        return ch;
+      }
 
-              BLECharacteristic* ch = pService->createCharacteristic(uuid, props);
+      // ====== Tarea de notificaciones periódicas ======
+      void TaskNotify(void*) {
+        // MTU grande para permitir payloads de hasta ~180 bytes si hiciera falta
+        BLEDevice::setMTU(185);
+        const TickType_t period = pdMS_TO_TICKS(50); // 20 Hz
+        for (;;) {
+          if (deviceConnected) {
+            // --- Señales derivadas ---
+            const auto& SL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
+            const auto& SR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
 
-              // CCCD indispensable en iOS
-              auto* cccd = new BLE2902();
-              cccd->setNotifications(true);
-              ch->addDescriptor(cccd);
-
-              if (cbs) ch->setCallbacks(cbs);
-              return ch;
-            };
-
-            // Crea las 5 características
-            chIMU_L = mkChr(CHR_IMU_L_UUID);
-            chIMU_R = mkChr(CHR_IMU_R_UUID);
-            chENC_L = mkChr(CHR_ENC_L_UUID);
-            chENC_R = mkChr(CHR_ENC_R_UUID);
-            chF3    = mkChr(CHR_F3_UUID);
-            // (si quieres una RX desde el teléfono, crea otra con writable=true y setCallbacks(new MyCallbacks()))
-
-            // Valores iniciales (opcional, evita “empty” en primera lectura)
-            IMU6F z6{}; ONEF z1{}; THREEF z3{};
-            chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
-            chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
-            chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
-            chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
-            chF3   ->setValue((uint8_t*)&z3, sizeof(z3));
-            
-            pService->start();
-
-            BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
-            pAdvertising->addServiceUUID(SERVICE_UUID);
-            pAdvertising->setScanResponse(true);
-            pAdvertising->start();
-
-            Serial.println("ESP32 BLE listo para conexiones");
-
-            xTaskCreatePinnedToCore(
-                TaskNotify,
-                "BLE_NOTIFY",
-                4096,
-                nullptr,
-                1,
-                nullptr,
-                1
-            );
-        }
-
-        void enviarEstado() {
-            float pavg = Aquiles::Power::getPackSOC();
-            char msg[96];
-            snprintf(msg, sizeof(msg), "BAT:avg=%.1f",pavg);
-
-            if (pCharacteristic) {
-                pCharacteristic->setValue(msg);
-                pCharacteristic->notify();
+            // ===== Encoder L =====
+            if (chENC_L) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "EncL: %.2f rad", SL.theta);
+              chENC_L->setValue(msg);
+              chENC_L->notify();
             }
 
-            Serial.print("Enviado: ");
-            Serial.println(msg);
-        }
-        void TaskNotify(void* /*pv*/) {
-          // Intentar MTU alto para notificar frames largos de una sola vez
-          BLEDevice::setMTU(185);
-
-          uint8_t seq = 0;
-          const TickType_t period = pdMS_TO_TICKS(50); // 20 Hz
-
-          for (;;) {
-            if (deviceConnected && pCharacteristic) {
-              enviarEstado();
-              // Tomamos señales de la capa Detection
-              // auto sL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
-              // auto sR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
-
-              // TelemetryBLEv1 f{};
-              // f.sof  = 0xD1;
-              // f.ver  = 0x01;
-              // f.len  = sizeof(TelemetryBLEv1)-1;
-              // f.seq  = ++seq;
-              // f.t_ms = millis();
-
-              // f.thL_q15 = _ble_rad_to_q15(sL.theta);
-              // f.wL_q15  = _ble_vel_to_q15(sL.omega);
-              // f.aL_q14  = _ble_g_to_q14  (sL.a_fwd_g);
-
-              // f.thR_q15 = _ble_rad_to_q15(sR.theta);
-              // f.wR_q15  = _ble_vel_to_q15(sR.omega);
-              // f.aR_q14  = _ble_g_to_q14  (sR.a_fwd_g);
-
-              // float soc    = Aquiles::Power::getPackSOC();
-              // float socMin = Aquiles::Power::getPackSOCmin();
-              // f.soc_q10    = _ble_pct_to_q10(soc);
-              // f.socMin_q10 = _ble_pct_to_q10(socMin);
-
-              // // Flags
-              // f.flags = 0;
-              // if (Aquiles::Safety::triggered()) f.flags |= (1u<<1);
-              // // si querés propagar OC desde otro lado, OR bit0 acá
-
-              // f.crc8 = _ble_crc8_07(reinterpret_cast<const uint8_t*>(&f), sizeof(TelemetryBLEv1)-1, 0x00);
-
-              // // Notificar
-              // pCharacteristic->setValue(reinterpret_cast<uint8_t*>(&f), sizeof(f));
-              // pCharacteristic->notify();
+            // ===== Encoder R =====
+            if (chENC_R) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "EncR: %.2f rad", SR.theta);
+              chENC_R->setValue(msg);
+              chENC_R->notify();
             }
-            vTaskDelay(period);
+
+            // ===== IMU L =====
+            if (chIMU_L) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "IMUL: a=%.2fg w=%.2f", SL.a_fwd_g, SL.omega);
+              chIMU_L->setValue(msg);
+              chIMU_L->notify();
+            }
+
+            // ===== IMU R =====
+            if (chIMU_R) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "IMUR: a=%.2fg w=%.2f", SR.a_fwd_g, SR.omega);
+              chIMU_R->setValue(msg);
+              chIMU_R->notify();
+            }
+
+            // ===== Estado de batería =====
+            float socAvg = Aquiles::Power::getPackSOC();
+            float socMin = Aquiles::Power::getPackSOCmin();
+
+            if (chF_3) {
+              char msg[32];
+              snprintf(msg, sizeof(msg), "Bat: %.0f%% (min %.0f%%)", socAvg, socMin);
+              chF_3->setValue(msg);
+              chF_3->notify();
+            }
           }
+          vTaskDelay(period);
         }
-    }
+      }
 
+      // ====== Inicialización BLE (servicio + características + task) ======
+      void init() {
+        // IMPORTANTE: DEVICE_NAME debe existir (lo tenés como "Aquiles X1" en tu código)
+        BLEDevice::init(DEVICE_NAME);
+
+        BLEServer* pServer = BLEDevice::createServer();
+        pServer->setCallbacks(new MyServerCallbacks());
+
+        BLEService* pService = pServer->createService(SERVICE_UUID);
+
+        // Crear características exactamente con tus UUIDs
+        chIMU_L = mkChr(pService, CHR_IMU_L_UUID);
+        chIMU_R = mkChr(pService, CHR_IMU_R_UUID);
+        chENC_L = mkChr(pService, CHR_ENC_L_UUID);
+        chENC_R = mkChr(pService, CHR_ENC_R_UUID);
+        chF_3   = mkChr(pService, CHR_F_3_UUID);
+
+        // Valores iniciales (cero seguro)
+        {
+          IMU6F  z6{}; ONEF z1{}; THREEF z3{};
+          if (chIMU_L) chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
+          if (chIMU_R) chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
+          if (chENC_L) chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
+          if (chENC_R) chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
+          if (chF_3)   chF_3  ->setValue((uint8_t*)&z3, sizeof(z3));
+        }
+
+        pService->start();
+
+        BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+        pAdvertising->addServiceUUID(SERVICE_UUID);
+        pAdvertising->setScanResponse(true);
+        pAdvertising->start();
+
+        Serial.println("[BLE] Servicio listo y anunciando");
+
+        // Task de notificación
+        xTaskCreatePinnedToCore(
+          TaskNotify, "BLE_NOTIFY",
+          4096, nullptr,
+          1, nullptr,
+          1  // core 1 como en tu estilo
+        );
+      }
+
+      // ====== “enviarEstado” minimalista (usa chF_3: 3 floats) ======
+      void enviarEstado() {
+        if (!deviceConnected || !chF_3) return;
+        THREEF f3{ Aquiles::Power::getPackSOC(),
+                  Aquiles::Power::getPackSOCmin(),
+                  1.0f /* placeholder “health” */ };
+        chF_3->setValue((uint8_t*)&f3, sizeof(f3));
+        chF_3->notify();
+      }
+
+    } // namespace BLE
     // ================= TAREAS BÁSICAS =================
     namespace Tasks {
         void Init(void* /*params*/) {
