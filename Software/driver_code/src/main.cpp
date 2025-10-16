@@ -367,7 +367,35 @@ float encoder_5600(){
 
 
 
+// ===== LED breathing en GPIO 7 (PWM no bloqueante) =====
+static float  led_phase = 0.0f;               // 0..1
+static const float LED_PERIOD_S = 2.5f;       // segundos por ciclo (ajustá a gusto)
+static const int   LED_PIN_GPIO = 7;          // tu LED en GPIO7
+static const int   LED_PWM_RANGE = 255;       // 8 bits (podés subir a 1023/4095)
 
+static inline void led_breathe_begin() {
+  pinMode(LED_PIN_GPIO, OUTPUT);
+  // (Opcional, RP2040 Earle core)
+  analogWriteFreq(1000);          // ~1 kHz, suficiente para LED
+  analogWriteRange(LED_PWM_RANGE);
+  analogWrite(LED_PIN_GPIO, LED_PWM_RANGE);
+}
+
+// dt_s = delta de tiempo en segundos (usá el que ya calculás)
+static inline void led_breathe_update(float dt_s) {
+  // Avanza fase 0..1
+  led_phase += dt_s / LED_PERIOD_S;
+  if (led_phase >= 1.0f) led_phase -= 1.0f;
+
+  // Curva “breathing”: senoidal 0..1, con un toque de gamma para que se vea más lineal
+  // x: 0..1 (brillo “lineal”)
+  float x = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * led_phase));
+  // gamma ~2.0 para compensar percepción
+  float y = x * x;
+
+  int duty = (int)(y * LED_PWM_RANGE + 0.5f);
+  analogWrite(LED_PIN_GPIO, duty);
+}
 
 ///////////////////////
 void setup() {
@@ -395,8 +423,7 @@ void setup() {
   pixels.begin();
   pixels.clear();
   pixels.show();
-  pinMode(7, OUTPUT);
-  digitalWrite(7, LOW); // LED interno del Waveshare RP2040 Zero
+  led_breathe_begin();// LED interno del Waveshare RP2040 Zero
 }
 
 void loop() {
@@ -409,7 +436,7 @@ void loop() {
   if (last_us == 0) last_us = now_us;
   float dt = (now_us - last_us) * 1e-6f;
   last_us = now_us;
-
+  led_breathe_update(dt);
   // 3) Sens ores cada ~2 ms
   static uint32_t last_sense_us = 0;
   if (now_us - last_sense_us >= 2000) {
