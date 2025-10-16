@@ -378,7 +378,7 @@ static inline void led_breathe_begin() {
   // (Opcional, RP2040 Earle core)
   analogWriteFreq(1000);          // ~1 kHz, suficiente para LED
   analogWriteRange(LED_PWM_RANGE);
-  analogWrite(LED_PIN_GPIO, 0);
+  analogWrite(LED_PIN_GPIO, LED_PWM_RANGE);
 }
 
 // dt_s = delta de tiempo en segundos (usá el que ya calculás)
