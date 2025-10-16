@@ -339,40 +339,41 @@ namespace Aquiles {
 
           for (;;) {
             if (deviceConnected && pCharacteristic) {
+              enviarEstado();
               // Tomamos señales de la capa Detection
-              auto sL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
-              auto sR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
+              // auto sL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
+              // auto sR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
 
-              TelemetryBLEv1 f{};
-              f.sof  = 0xD1;
-              f.ver  = 0x01;
-              f.len  = sizeof(TelemetryBLEv1)-1;
-              f.seq  = ++seq;
-              f.t_ms = millis();
+              // TelemetryBLEv1 f{};
+              // f.sof  = 0xD1;
+              // f.ver  = 0x01;
+              // f.len  = sizeof(TelemetryBLEv1)-1;
+              // f.seq  = ++seq;
+              // f.t_ms = millis();
 
-              f.thL_q15 = _ble_rad_to_q15(sL.theta);
-              f.wL_q15  = _ble_vel_to_q15(sL.omega);
-              f.aL_q14  = _ble_g_to_q14  (sL.a_fwd_g);
+              // f.thL_q15 = _ble_rad_to_q15(sL.theta);
+              // f.wL_q15  = _ble_vel_to_q15(sL.omega);
+              // f.aL_q14  = _ble_g_to_q14  (sL.a_fwd_g);
 
-              f.thR_q15 = _ble_rad_to_q15(sR.theta);
-              f.wR_q15  = _ble_vel_to_q15(sR.omega);
-              f.aR_q14  = _ble_g_to_q14  (sR.a_fwd_g);
+              // f.thR_q15 = _ble_rad_to_q15(sR.theta);
+              // f.wR_q15  = _ble_vel_to_q15(sR.omega);
+              // f.aR_q14  = _ble_g_to_q14  (sR.a_fwd_g);
 
-              float soc    = Aquiles::Power::getPackSOC();
-              float socMin = Aquiles::Power::getPackSOCmin();
-              f.soc_q10    = _ble_pct_to_q10(soc);
-              f.socMin_q10 = _ble_pct_to_q10(socMin);
+              // float soc    = Aquiles::Power::getPackSOC();
+              // float socMin = Aquiles::Power::getPackSOCmin();
+              // f.soc_q10    = _ble_pct_to_q10(soc);
+              // f.socMin_q10 = _ble_pct_to_q10(socMin);
 
-              // Flags
-              f.flags = 0;
-              if (Aquiles::Safety::triggered()) f.flags |= (1u<<1);
-              // si querés propagar OC desde otro lado, OR bit0 acá
+              // // Flags
+              // f.flags = 0;
+              // if (Aquiles::Safety::triggered()) f.flags |= (1u<<1);
+              // // si querés propagar OC desde otro lado, OR bit0 acá
 
-              f.crc8 = _ble_crc8_07(reinterpret_cast<const uint8_t*>(&f), sizeof(TelemetryBLEv1)-1, 0x00);
+              // f.crc8 = _ble_crc8_07(reinterpret_cast<const uint8_t*>(&f), sizeof(TelemetryBLEv1)-1, 0x00);
 
-              // Notificar
-              pCharacteristic->setValue(reinterpret_cast<uint8_t*>(&f), sizeof(f));
-              pCharacteristic->notify();
+              // // Notificar
+              // pCharacteristic->setValue(reinterpret_cast<uint8_t*>(&f), sizeof(f));
+              // pCharacteristic->notify();
             }
             vTaskDelay(period);
           }
