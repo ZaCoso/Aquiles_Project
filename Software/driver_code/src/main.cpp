@@ -39,13 +39,8 @@ float encoder_5600();   // devuelve ángulo del AS5600 en radianes (0..2π)
 std::vector<float> readMPU6050();  
 // Flag en Telemetry.flags para avisar sobrecorriente al master
 static constexpr uint16_t FLAG_OC = (1u << 0);
-#include "hardware/uart.h"
-#include "hardware/gpio.h"
-#include "hardware/adc.h"
-#include "pico/stdlib.h"
-#include "hardware/timer.h"
-#include <cstring>
-#include <cmath>
+
+
 
 namespace DriverUART {
 
