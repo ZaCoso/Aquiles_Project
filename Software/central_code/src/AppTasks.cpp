@@ -589,8 +589,8 @@ namespace Aquiles {
         static volatile bool g_estop = false;
         void IRAM_ATTR isr_estop(){ g_estop = true; }
         void init(){
-          pinMode(PIN_ESTOP, INPUT_PULLDOWN);  // activo en HIGH
-          attachInterrupt(digitalPinToInterrupt(PIN_ESTOP), isr_estop, RISING);
+          pinMode(PIN_ESTOP, INPUT_PULLUP);  // activo en HIGH
+          attachInterrupt(digitalPinToInterrupt(PIN_ESTOP), isr_estop, FALLING);
         }
         inline bool triggered(){ return g_estop; }
         } // namespace Safety
