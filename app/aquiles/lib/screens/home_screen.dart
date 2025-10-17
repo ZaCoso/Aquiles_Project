@@ -77,6 +77,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
         ),
         child: SafeArea(
+          bottom: false,
           child: Column(
             children: [
               _HomeHeader(
@@ -233,10 +234,16 @@ class _MetricsCard extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: const [
-          _MetricItem(icon: Icons.battery_full, label: '33%', color: Color(0xFF8CCBD5)),
-          _MetricItem(icon: Icons.route, label: '33Km', color: Color(0xFF8CCBD5)),
-          _MetricItem(icon: Icons.speed, label: '33Km/h', color: Color(0xFF8CCBD5)),
-          _MetricItem(icon: Icons.accessibility_new, label: 'Eco Mode', color: Color(0xFF8CCBD5)),
+          _MetricItem(
+              icon: Icons.battery_full, label: '33%', color: Color(0xFF8CCBD5)),
+          _MetricItem(
+              icon: Icons.route, label: '33Km', color: Color(0xFF8CCBD5)),
+          _MetricItem(
+              icon: Icons.speed, label: '33Km/h', color: Color(0xFF8CCBD5)),
+          _MetricItem(
+              icon: Icons.accessibility_new,
+              label: 'Eco Mode',
+              color: Color(0xFF8CCBD5)),
         ],
       ),
     );
@@ -381,7 +388,8 @@ class _ModeCard extends StatelessWidget {
                   onTap: () => onModeSelected(index),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    margin: EdgeInsets.only(right: index == modes.length - 1 ? 0 : 12),
+                    margin: EdgeInsets.only(
+                        right: index == modes.length - 1 ? 0 : 12),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
                       color: isSelected
@@ -440,10 +448,11 @@ class _HomeBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = ['Estado', 'Rendimiento', 'Ajustes', 'Tutoriales'];
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+      padding: EdgeInsets.fromLTRB(16, 10, 16, 20 + bottomInset),
       decoration: BoxDecoration(
-        color: const Color(0xFF082030).withOpacity(0.85),
+        color: const Color(0xFF102030).withOpacity(0.85),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Row(
@@ -462,7 +471,8 @@ class _HomeBottomNav extends StatelessWidget {
                       color: isSelected
                           ? const Color(0xFFEAF5FF)
                           : const Color(0xFF9CB6C6),
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
                       fontSize: 13,
                     ),
                   ),
