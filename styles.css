@@ -2381,8 +2381,8 @@ img {
 }
 
 .exo-image {
-  max-width: 120%;
-  height: 150%;
+  max-width: 80%;
+  height: 80%;
   filter: drop-shadow(0 0 15px rgba(140, 203, 213, 0.3));
   opacity: 0;
   transform: translateX(50px);
@@ -3732,12 +3732,21 @@ img {
   .app-subtitle {
     font-size: 1.5rem;
   }
-
-  .hero-image {
-    display: block !important;
-    width: 100%;
-    max-width: 300px;
-    margin-top: 20px;
+  /* @media (min-width:1000px){
+    .hero-image {
+      display: block !important;
+      
+      width: 200px;
+      margin-top: 20px;
+    }
+  } */
+  @media (min-width:700px) and (max-width:1000px){
+    .hero-image {
+      display: block !important;
+      width: 100%;
+      max-width: 300px;
+      /* margin-top: 20px; */
+    }
   }
 
   .app-showcase {
