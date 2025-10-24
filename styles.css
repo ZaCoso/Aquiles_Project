@@ -4380,10 +4380,16 @@ img {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 30px;
-  padding-right: 100px;
-  padding-left: 100px;
+  /* padding-right: 100px;
+  padding-left: 100px; */
 }
+@media (max-width: 1000px) {
+  .cert-grid {
+    /* padding-right: 50px;
+    padding-left: 50px; */
+  }
 
+}
 .cert-item {
   background-color: rgba(16, 32, 48, 0.7);
   padding: 30px;
