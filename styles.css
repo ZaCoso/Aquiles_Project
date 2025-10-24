@@ -2932,15 +2932,18 @@ img {
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
   padding: 10px 20px;
+  margin-bottom: 20px;
   border-radius: 8px;
   transition: all 0.3s ease;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3), 0 0 10px rgba(140, 203, 213, 0.2);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3), 0 0 20px rgba(140, 203, 213, 0.4);
   border: 1px solid rgba(140, 203, 213, 0.2);
 }
 
 .google-play-button:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 15px rgba(140, 203, 213, 0.3);
+  transform: scale(1.05);
+  box-shadow: 
+  0 10px 25px rgba(0, 0, 0, 0.4),
+  0 0 15px rgba(140, 203, 213, 0.3);
   background-color: rgba(0, 0, 0, 0.8);
 }
 
@@ -2983,8 +2986,9 @@ img {
     margin-right: 0;
   }
 }
+/* Iphone Viejo */
 
-.phone-frame {
+/* .phone-frame {
   width: 280px;
   height: 590px;
   background-color: #000;
@@ -2993,7 +2997,7 @@ img {
   padding-top: 60px;
   position: relative;
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), 0 0 30px rgba(140, 203, 213, 0.3);
-  border: 1px solid #444;
+  border: 5px solid #444;
   overflow: hidden;
   transform: perspective(800px) rotateY(0deg);
   transition: all 0.5s ease;
@@ -3048,10 +3052,10 @@ img {
 
 .app-screenshot {
   object-fit: fill;
-  /* object-fit: cover; */
+  object-fit: cover;
 }
-
-.app-particles {
+*/
+/* .app-particles {
   position: absolute;
   top: 0;
   left: 0;
@@ -3059,9 +3063,122 @@ img {
   height: 100%;
   overflow: hidden;
   z-index: 1;
+}  */
+
+/* Iphone 16 */
+.iphone-container {
+  position: relative;
+  width: 400px;
+  height: 820px;
+  background: linear-gradient(145deg, #000, #232323);
+  border-radius: 55px;
+  padding: 12px;
+  margin-right: 70px;
+  box-shadow: 
+      0 30px 60px rgba(0, 0, 0, 0.5),
+      0 0 0 6px rgba(255, 255, 255, 0.1),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+@media (max-width: 1000px) {
+  .app-content {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .app-info {
+    order: 1;
+    margin-bottom: 30px;
+    margin-top: 25px;
+    padding-right: 0;
+  }
+  
+  .iphone-container {
+    order: 2;
+    margin-right: 0;
+  }
+}
+
+/* Dynamic Island */
+.dynamic-island {
+  position: absolute;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130px;
+  height: 37px;
+  background: #000;
+  border-radius: 25px;
+  z-index: 10;
+  /* box-shadow: 0 2px 10px rgba(0, 0, 0, 0.8); */
+}
+
+/* Botones laterales */
+.side-button {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+}
+
+.volume-up {
+  left: -8px;
+  top: 120px;
+  width: 3px;
+  height: 80px;
+}
+
+.volume-down {
+  left: -8px;
+  top: 230px;
+  width: 3px;
+  height: 80px;
+}
+
+.power-button {
+  right: -8px;
+  top: 150px;
+  width: 3px;
+  height: 80px;
+}
+
+/* Pantalla */
+.screen {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  border-radius: 45px;
+  overflow: hidden;
+  position: relative;
+}
+
+.screen img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .iphone-container {
+      width: 320px;
+      height: 656px;
+      border-radius: 44px;
+      padding: 10px;
+  }
+
+  .dynamic-island {
+      width: 104px;
+      height: 30px;
+      top: 18px;
+  }
+
+  .screen {
+      border-radius: 36px;
+  }
 }
 
 /* Services Section */
+
 .services {
   padding: 100px 0;
   position: relative;
@@ -3638,6 +3755,10 @@ img {
   }
   
   .app-mockup {
+    order: 2;
+  }
+  
+  .iphone-container {
     order: 2;
   }
   
@@ -4388,13 +4509,6 @@ img {
   gap: 30px;
   /* padding-right: 100px;
   padding-left: 100px; */
-}
-@media (max-width: 1000px) {
-  .cert-grid {
-    /* padding-right: 50px;
-    padding-left: 50px; */
-  }
-
 }
 .cert-item {
   background-color: rgba(16, 32, 48, 0.7);
