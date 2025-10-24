@@ -3563,12 +3563,18 @@ img {
 
   .logo {
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    transition: transform 0.5s ease;
+    justify-content: center;
+    padding-left: 30px;
+  }
+
+  .logo:hover {
+    transform: scale(1.1);
   }
 
   .logo img {
-    height: 40px;
+    height: 55px;
+    justify-content: center;
   }
 
   .nav-left,
