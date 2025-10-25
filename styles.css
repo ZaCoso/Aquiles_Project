@@ -4213,7 +4213,7 @@ img {
   left: 15px;
   width: 60px;
   height: 60px;
-  background-color: rgba(140, 203, 213, 0.1);
+  /* background-color: rgba(140, 203, 213, 0.1); */
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -4222,7 +4222,7 @@ img {
   color: var(--color-neon-teal);
   font-size: 20px;
   flex-shrink: 0;
-  box-shadow: 0 0 15px rgba(140, 203, 213, 0.3);
+  /* box-shadow: 0 0 15px rgba(140, 203, 213, 0.3); */
   transition: all 0.3s ease;
   z-index: 1;
 }
@@ -4239,11 +4239,11 @@ img {
   align-items: center;
   justify-content: center;
   margin-right: 20px;
-  color: var(--color-neon-teal);
+  /* color: var(--color-neon-teal); */
   font-size: 20px;
   flex-shrink: 0;
   /* box-shadow:  0px 0px 15px rgba(140, 203, 213, 0.4); */
-  filter: drop-shadow(0 0 1px rgba(140, 203, 213, 0.3));
+  /* filter: drop-shadow(0 0 1px rgba(140, 203, 213, 0.3)); */
   transition: all 0.3s ease;
   z-index: 1;
 }
@@ -4254,20 +4254,20 @@ img {
   height: 100%;
   object-fit: contain;
   border-radius: 8%;
-  filter: drop-shadow(0 0 1px rgba(140, 203, 213, 0.3));
+  filter: drop-shadow(0 0 10px rgba(140, 203, 213, 0.6));
   transition: all 0.3s ease;
 }
 
 /* Hover effect para la imagen rectangular */
-.award-item:hover .award-iconimpa {
-  background-color: rgba(140, 203, 213, 0.1);
+.award-item:hover .award-iconimpa img{
+  /* background-color: rgba(140, 203, 213, 0.1); */
   transform: scale(1.05);
-  box-shadow: 0 0 20px rgba(140, 203, 213, 0.3);
+  /* box-shadow: 0 0 20px rgba(140, 203, 213, 0.3); */
 }
 
 .award-item:hover .award-iconimpa img {
   transform: scale(1.05);
-  filter: drop-shadow(0 0 8px rgba(140, 203, 213, 0.6));
+  filter: drop-shadow(0 0 7px rgba(140, 203, 213, 1.2));
 }
 
 
@@ -4345,8 +4345,8 @@ img {
   max-height: 300px;
   height: auto;
   border-radius: 10px;
-  filter: drop-shadow(0 2px 8px rgba(140, 203, 213, 0.2));
-  box-shadow: 0 10px 25px rgba(140, 203, 213, 0.4);
+  filter: drop-shadow(0 0px 8px rgba(140, 203, 213, 0.2));
+  box-shadow: 0 0px 25px rgba(140, 203, 213, 0.3);
   border: 1px solid rgba(140, 203, 213, 0.2);
   cursor: pointer;
   border-radius: 2rem 2rem 2rem 2rem;
@@ -4456,7 +4456,7 @@ img {
     max-height: 250px; /* Ligeramente más pequeño en mobile */
     width: auto;
     height: auto;
-    filter: drop-shadow(0 2px 8px rgba(140, 203, 213, 0.2));
+    filter: drop-shadow(0 0px 8px rgba(140, 203, 213, 0.2));
   }
 
   .award-title-indent {
