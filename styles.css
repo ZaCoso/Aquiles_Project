@@ -4447,7 +4447,7 @@ img {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    filter: drop-shadow(0 0 1px rgba(140, 203, 213, 0.3));
+    filter: drop-shadow(0 0 6px rgba(140, 203, 213, 0.7));
   }
 
   /* Estilos para award-image en mobile */
