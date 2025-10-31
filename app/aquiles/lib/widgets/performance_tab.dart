@@ -1,3 +1,4 @@
+import 'package:aquiles/models/ble_readings.dart';
 import 'package:aquiles/providers/ble_connection_provider.dart';
 import 'package:aquiles/providers/ble_provider.dart';
 import 'package:flutter/material.dart';
@@ -10,7 +11,8 @@ class PerformanceTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final message = ref.watch(notificationStreamProvider);
+    final AsyncValue<BleReadings> telemetry =
+        ref.watch(telemetryStreamProvider);
     final bleState = ref.watch(bleConnectionProvider);
 
     if (bleState == BleConnectionState.connected) {
@@ -20,8 +22,8 @@ class PerformanceTab extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildPerformanceCard(context),
-            message.when(
-              data: (msg) => Text("ESP32 dice: $msg"),
+            telemetry.when(
+              data: (data) => _buildTelemetrySection(context, data),
               loading: () => const CircularProgressIndicator(),
               error: (e, _) => Text("Error: $e"),
             ),
@@ -181,5 +183,82 @@ class PerformanceTab extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildTelemetrySection(BuildContext context, BleReadings telemetry) {
+    final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: Colors.white.withOpacity(0.8),
+        );
+    final highlightStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
+          color: const Color(0xFF8CCBD5),
+          fontWeight: FontWeight.w600,
+        );
+
+    Widget buildRow(String label, String value) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: textStyle),
+            Text(value, style: highlightStyle),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A1128).withOpacity(0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF3F797A).withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Telemetría en vivo',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          if (telemetry.timestamp.millisecondsSinceEpoch != 0)
+            buildRow(
+              'Actualización',
+              '${telemetry.timestamp.toLocal().toIso8601String()}',
+            ),
+          buildRow(
+            'IMU izquierda',
+            _formatList(telemetry.imuLeft),
+          ),
+          buildRow(
+            'IMU derecha',
+            _formatList(telemetry.imuRight),
+          ),
+          buildRow(
+            'Encoder izquierdo',
+            telemetry.encoderLeft?.toStringAsFixed(3) ?? '--',
+          ),
+          buildRow(
+            'Encoder derecho',
+            telemetry.encoderRight?.toStringAsFixed(3) ?? '--',
+          ),
+          buildRow(
+            'Vector fuerzas',
+            _formatList(telemetry.forceVector),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatList(List<double>? values) {
+    if (values == null || values.isEmpty) {
+      return '--';
+    }
+    return values.map((v) => v.toStringAsFixed(3)).join(', ');
   }
 }

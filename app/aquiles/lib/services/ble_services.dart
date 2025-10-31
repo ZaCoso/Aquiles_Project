@@ -1,170 +1,274 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:aquiles/config/ble_device_config.dart';
+import 'package:aquiles/models/ble_readings.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
-class BleService {
+abstract class BleClient {
+  Stream<DiscoveredDevice> scan();
+  Stream<BleReadings> telemetryStream();
+  Future<bool> connectToDeviceId(String deviceId);
+  Future<bool> connectToDevice(String nameToFind);
+  Future<void> send(String command);
+  Future<void> disconnect();
+}
+
+class BleService implements BleClient {
+  BleService(this._ble, {required this.config});
+
   final FlutterReactiveBle _ble;
-  final Uuid serviceUuid;
-  final Uuid txUuid;
-  final Uuid rxUuid;
+  final BleDeviceConfig config;
 
   DiscoveredDevice? _device;
-  QualifiedCharacteristic? _txChar;
-  QualifiedCharacteristic? _rxChar;
-
+  QualifiedCharacteristic? _commandChar;
   StreamSubscription<ConnectionStateUpdate>? _connectionSubscription;
-  StreamSubscription<List<int>>? _notificationSubscription;
-  final _notificationController = StreamController<String>.broadcast();
-  bool _notificationsActive = false;
+  final Map<BleSensorType, StreamSubscription<List<int>>>
+      _notificationSubscriptions =
+      <BleSensorType, StreamSubscription<List<int>>>{};
 
-  BleService(this._ble, this.serviceUuid, this.txUuid, this.rxUuid);
+  BleReadings _latestReadings = BleReadings.empty();
+  final StreamController<BleReadings> _readingsController =
+      StreamController<BleReadings>.broadcast();
 
-  // Expose scan stream for UI to list available devices
+  @override
   Stream<DiscoveredDevice> scan() {
-    return _ble.scanForDevices(withServices: [serviceUuid]);
+    return _ble.scanForDevices(withServices: [config.serviceUuid]);
   }
 
+  @override
+  Stream<BleReadings> telemetryStream() => _readingsController.stream;
+
+  @override
   Future<bool> connectToDeviceId(String deviceId) async {
     final completer = Completer<bool>();
     _connectionSubscription = _ble.connectToDevice(
       id: deviceId,
-      servicesWithCharacteristicsToDiscover: {serviceUuid: [txUuid, rxUuid]},
-    ).listen((event) async {
-      if (event.connectionState == DeviceConnectionState.connected) {
-        _txChar = QualifiedCharacteristic(
-          deviceId: deviceId,
-          serviceId: serviceUuid,
-          characteristicId: txUuid,
-        );
-        _rxChar = QualifiedCharacteristic(
-          deviceId: deviceId,
-          serviceId: serviceUuid,
-          characteristicId: rxUuid,
-        );
-        _notificationSubscription = _ble
-            .subscribeToCharacteristic(_rxChar!)
-            .listen((data) {
-          final message = utf8.decode(data);
-          print('Mensaje recibido: $message');
-          _notificationController.add(message);
-        }, onError: (e, st) {
-          // Ignore notification stream errors during teardown
-          _notificationsActive = false;
-        }, onDone: () {
-          _notificationsActive = false;
-        }, cancelOnError: true);
-        _notificationsActive = true;
-        final services = await _ble.discoverServices(deviceId);
-        for (var service in services) {
-          print('Service: ${service.serviceId}');
-          for (var char in service.characteristics) {
-            print('Characteristic: ${char.characteristicId}');
-          }
+      servicesWithCharacteristicsToDiscover: {
+        config.serviceUuid:
+            config.sensors.map((sensor) => sensor.characteristicUuid).toList()
+              ..add(config.commandUuid),
+      },
+    ).listen(
+      (event) async {
+        switch (event.connectionState) {
+          case DeviceConnectionState.connected:
+            await _onConnected(deviceId);
+            if (!completer.isCompleted) {
+              completer.complete(true);
+            }
+            break;
+          case DeviceConnectionState.disconnected:
+            if (!completer.isCompleted) {
+              completer.complete(false);
+            }
+            break;
+          default:
+            break;
         }
-        completer.complete(true);
-      } else if (event.connectionState == DeviceConnectionState.disconnected) {
-        completer.complete(false);
-      }
-    });
+      },
+      onError: (error, stackTrace) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+    );
     return completer.future;
   }
 
+  @override
   Future<bool> connectToDevice(String nameToFind) async {
-    final scanStream = _ble.scanForDevices(withServices: [serviceUuid]);
-
+    final scanStream = _ble.scanForDevices(withServices: [config.serviceUuid]);
     await for (final device in scanStream) {
       if (device.name == nameToFind) {
         _device = device;
-
-        final completer = Completer<bool>();
-
-    _connectionSubscription = _ble.connectToDevice(
-          id: device.id,
-          servicesWithCharacteristicsToDiscover: {
-            serviceUuid: [txUuid, rxUuid]
-          },
-        ).listen((event) async {
-          if (event.connectionState == DeviceConnectionState.connected) {
-            _txChar = QualifiedCharacteristic(
-              deviceId: device.id,
-              serviceId: serviceUuid,
-              characteristicId: txUuid,
-            );
-            _rxChar = QualifiedCharacteristic(
-              deviceId: device.id,
-              serviceId: serviceUuid,
-              characteristicId: rxUuid,
-            );
-
-            _notificationSubscription = _ble
-                .subscribeToCharacteristic(_rxChar!)
-                .listen((data) {
-              final message = utf8.decode(data);
-              print('Mensaje recibido: $message');
-              _notificationController.add(message);
-            }, onError: (e, st) {
-              _notificationsActive = false;
-            }, onDone: () {
-              _notificationsActive = false;
-            }, cancelOnError: true);
-            _notificationsActive = true;
-            final services = await _ble.discoverServices(device.id);
-            for (var service in services) {
-              print('Service: ${service.serviceId}');
-              for (var char in service.characteristics) {
-                print('Characteristic: ${char.characteristicId}');
-              }
-            }
-
-            completer.complete(true);
-          } else if (event.connectionState ==
-              DeviceConnectionState.disconnected) {
-            completer.complete(false);
-          }
-        });
-
-        return completer.future;
+        return connectToDeviceId(device.id);
       }
     }
-
     return false;
   }
 
+  @override
   Future<void> send(String command) async {
-    if (_txChar != null) {
-      await _ble.writeCharacteristicWithResponse(
-        _txChar!,
-        value: utf8.encode(command),
-      );
+    if (_commandChar == null) {
+      throw StateError('No hay característica de comando disponible.');
     }
+    await _ble.writeCharacteristicWithResponse(
+      _commandChar!,
+      value: utf8.encode(command),
+    );
   }
 
-  Stream<String> getNotificationStream() {
-    return _notificationController.stream;
-  }
-
+  @override
   Future<void> disconnect() async {
-    // Cancel notifications subscription if still active.
-    if (_notificationsActive) {
-      try {
-        await _notificationSubscription?.cancel();
-      } catch (_) {
-        // Ignore plugin errors on unsubscribe during disconnect
-      }
-    }
-    _notificationSubscription = null;
-    _notificationsActive = false;
+    await _cancelNotificationSubscriptions();
 
-    // Cancel connection subscription.
     try {
       await _connectionSubscription?.cancel();
-    } catch (_) {
-      // Ignore plugin errors on cancel
-    }
+    } catch (_) {}
     _connectionSubscription = null;
 
-    _txChar = null;
-    _rxChar = null;
+    _commandChar = null;
     _device = null;
+    _latestReadings = BleReadings.empty();
+  }
+
+  Future<void> dispose() async {
+    await disconnect();
+    await _readingsController.close();
+  }
+
+  Future<void> _onConnected(String deviceId) async {
+    await _cancelNotificationSubscriptions();
+    _latestReadings = BleReadings.empty();
+
+    List<DiscoveredService> services;
+    try {
+      services = await _ble.discoverServices(deviceId);
+    } catch (e) {
+      print('[BLE] No se pudieron descubrir servicios: $e');
+      return;
+    }
+
+    for (final service in services) {
+      print('Service: ${service.serviceId}');
+      for (final char in service.characteristics) {
+        print('Characteristic: ${char.characteristicId}');
+      }
+    }
+
+    DiscoveredService? targetService;
+    for (final service in services) {
+      if (service.serviceId == config.serviceUuid) {
+        targetService = service;
+        break;
+      }
+    }
+
+    if (targetService == null) {
+      print(
+          '[BLE] Servicio ${config.serviceUuid} no encontrado en el dispositivo.');
+      return;
+    }
+
+    final commandCharacteristic = _findCharacteristic(
+      targetService,
+      config.commandUuid,
+    );
+    _commandChar = commandCharacteristic == null
+        ? null
+        : QualifiedCharacteristic(
+            deviceId: deviceId,
+            serviceId: commandCharacteristic.serviceId,
+            characteristicId: commandCharacteristic.characteristicId,
+          );
+
+    for (final sensor in config.sensors) {
+      await _subscribeToSensor(
+        deviceId: deviceId,
+        service: targetService,
+        sensor: sensor,
+      );
+    }
+
+    try {
+      final negotiatedMtu = await _ble.requestMtu(deviceId: deviceId, mtu: 185);
+      print('[BLE] MTU negociado: $negotiatedMtu');
+    } catch (e) {
+      print('[BLE] No se pudo negociar MTU alto: $e');
+    }
+  }
+
+  Future<void> _subscribeToSensor({
+    required String deviceId,
+    required DiscoveredService service,
+    required BleSensorConfig sensor,
+  }) async {
+    final characteristic = _findCharacteristic(
+      service,
+      sensor.characteristicUuid,
+    );
+    if (characteristic == null) {
+      print(
+          '[BLE] Característica ${sensor.label} (${sensor.characteristicUuid}) no encontrada.');
+      return;
+    }
+
+    final qualified = QualifiedCharacteristic(
+      deviceId: deviceId,
+      serviceId: characteristic.serviceId,
+      characteristicId: characteristic.characteristicId,
+    );
+
+    await _notificationSubscriptions[sensor.type]?.cancel();
+    _notificationSubscriptions[sensor.type] = _ble
+        .subscribeToCharacteristic(qualified)
+        .listen(
+          (data) => _handleSensorData(sensor, data),
+          onError: (error, stackTrace) =>
+              print('[BLE] Error en notificación (${sensor.label}): $error'),
+          onDone: () =>
+              print('[BLE] Notificaciones terminadas (${sensor.label})'),
+          cancelOnError: true,
+        );
+  }
+
+  DiscoveredCharacteristic? _findCharacteristic(
+    DiscoveredService service,
+    Uuid characteristicId,
+  ) {
+    for (final characteristic in service.characteristics) {
+      if (characteristic.characteristicId == characteristicId) {
+        return characteristic;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _cancelNotificationSubscriptions() async {
+    for (final entry in _notificationSubscriptions.entries) {
+      try {
+        await entry.value.cancel();
+      } catch (e) {
+        print('[BLE] Error al cancelar notificación (${entry.key}): $e');
+      }
+    }
+    _notificationSubscriptions.clear();
+  }
+
+  void _handleSensorData(BleSensorConfig sensor, List<int> rawData) {
+    if (rawData.isEmpty) {
+      return;
+    }
+
+    final values = _floatsFromBytes(rawData);
+    if (sensor.expectedValues != null &&
+        sensor.expectedValues != values.length) {
+      print('[BLE] Valores inesperados para ${sensor.label}: '
+          'se esperaban ${sensor.expectedValues}, se recibieron ${values.length}');
+    }
+    final timestamp = DateTime.now();
+    _latestReadings = _latestReadings.update(sensor.type, values, timestamp);
+    if (!_readingsController.isClosed) {
+      _readingsController.add(_latestReadings);
+    }
+  }
+
+  List<double> _floatsFromBytes(List<int> data) {
+    if (data.isEmpty) {
+      return const <double>[];
+    }
+    final byteLength = data.length;
+    if (byteLength % 4 != 0) {
+      print('[BLE] Longitud inválida (${data.length}) para flotantes.');
+    }
+    final count = byteLength ~/ 4;
+    final view = ByteData.sublistView(Uint8List.fromList(data));
+    final values = <double>[];
+    for (var i = 0; i < count; i++) {
+      values.add(view.getFloat32(i * 4, Endian.little));
+    }
+    return values;
   }
 }
