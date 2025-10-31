@@ -54,6 +54,25 @@ class AuthServices {
     }
   }
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await firebaseAuth.sendPasswordResetEmail(email: email);
+      print('Password reset email sent to $email');
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'user-not-found':
+          print('No user found with that email.');
+          break;
+        case 'invalid-email':
+          print('Invalid email format.');
+          break;
+        default:
+          print('Error sending reset email: ${e.code}');
+      }
+      rethrow;
+    }
+  }
+
   Future<String?> getUserId() async {
     if (firebaseAuth.currentUser == null) {
       return null;

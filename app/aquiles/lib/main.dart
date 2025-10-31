@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
+import 'screens/change_password_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/instructions_screen.dart';
@@ -69,6 +70,7 @@ class AquilesApp extends StatelessWidget {
         '/profile': (context) => const ProfileScreen(),
         '/device-scan': (context) => const DeviceScanScreen(),
         '/register': (context) => const RegisterScreen(),
+        '/change-password': (context) => const ChangePasswordScreen(),
       },
     );
   }
