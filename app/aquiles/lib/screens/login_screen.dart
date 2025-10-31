@@ -206,7 +206,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           Align(
                             alignment: Alignment.center,
                             child: TextButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                Navigator.of(context)
+                                    .pushNamed('/change-password');
+                              },
                               child: Text(
                                 '¿Olvidaste tu contraseña?',
                                 style: TextStyle(
