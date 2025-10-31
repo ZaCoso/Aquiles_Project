@@ -1415,7 +1415,7 @@ PODS:
     - Protobuf (~> 3.5)
     - SwiftProtobuf (~> 1.0)
   - RecaptchaInterop (101.0.0)
-  - SwiftProtobuf (1.31.1)
+  - SwiftProtobuf (1.32.0)
   - video_player_avfoundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -1510,7 +1510,7 @@ SPEC CHECKSUMS:
   Protobuf: 164aea2ae380c3951abdc3e195220c01d17400e0
   reactive_ble_mobile: ea97709e18fa6f0b0592909725d7ae7e1c595b64
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
-  SwiftProtobuf: e02f51c8c2df5845657aee2d4de9d61bf50ef788
+  SwiftProtobuf: 81e341191afbddd64aa031bd12862dccfab2f639
   video_player_avfoundation: 2cef49524dd1f16c5300b9cd6efd9611ce03639b
 
 PODFILE CHECKSUM: 83f6a08c58d4b249cda5d50acce1e33fac59623c
