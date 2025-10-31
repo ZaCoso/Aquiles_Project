@@ -7,10 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class UnconnectedStatusTab extends ConsumerStatefulWidget {
-  const UnconnectedStatusTab({Key? key}) : super(key: key);
+  const UnconnectedStatusTab({super.key});
 
   @override
-  ConsumerState<UnconnectedStatusTab> createState() => _UnconnectedStatusTabState();
+  ConsumerState<UnconnectedStatusTab> createState() =>
+      _UnconnectedStatusTabState();
 }
 
 class _UnconnectedStatusTabState extends ConsumerState<UnconnectedStatusTab> {
@@ -168,19 +169,20 @@ class _UnconnectedStatusTabState extends ConsumerState<UnconnectedStatusTab> {
                                           const SizedBox(width: 8),
                                           ElevatedButton(
                                             onPressed: bleState ==
-                                                    BleConnectionState.connecting
+                                                    BleConnectionState
+                                                        .connecting
                                                 ? null
                                                 : () async {
                                                     await scanner.stopScan();
-                                                    final success =
-                                                        await ble.connectToId(
-                                                            d.id);
+                                                    final success = await ble
+                                                        .connectToId(d.id);
                                                     if (success) {
                                                       await ble
                                                           .sendCommand('1');
                                                     } else {
                                                       // Remove unavailable device from list
-                                                      print('[BLE] Connection failed/unavailable for ' + d.id + ' (' + (d.name.isNotEmpty ? d.name : 'Dispositivo BLE') + '), removing from list');
+                                                      print(
+                                                          '[BLE] Connection failed/unavailable for ${d.id} (${d.name.isNotEmpty ? d.name : 'Dispositivo BLE'}), removing from list');
                                                       ref
                                                           .read(bleScanProvider
                                                               .notifier)

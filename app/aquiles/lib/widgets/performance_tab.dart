@@ -1,3 +1,4 @@
+import 'package:aquiles/config/ble_device_config.dart';
 import 'package:aquiles/models/ble_readings.dart';
 import 'package:aquiles/providers/ble_connection_provider.dart';
 import 'package:aquiles/providers/ble_provider.dart';
@@ -7,7 +8,7 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class PerformanceTab extends ConsumerWidget {
-  const PerformanceTab({Key? key}) : super(key: key);
+  const PerformanceTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -23,7 +24,14 @@ class PerformanceTab extends ConsumerWidget {
           children: [
             _buildPerformanceCard(context),
             telemetry.when(
-              data: (data) => _buildTelemetrySection(context, data),
+              data: (data) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTelemetrySection(context, data),
+                  const SizedBox(height: 16),
+                  _buildDebugTelemetryLabel(data),
+                ],
+              ),
               loading: () => const CircularProgressIndicator(),
               error: (e, _) => Text("Error: $e"),
             ),
@@ -228,26 +236,26 @@ class PerformanceTab extends ConsumerWidget {
           if (telemetry.timestamp.millisecondsSinceEpoch != 0)
             buildRow(
               'Actualización',
-              '${telemetry.timestamp.toLocal().toIso8601String()}',
+              telemetry.timestamp.toLocal().toIso8601String(),
             ),
           buildRow(
-            'IMU izquierda',
+            bleDeviceConfig.sensorForType(BleSensorType.imuLeft).label,
             _formatList(telemetry.imuLeft),
           ),
           buildRow(
-            'IMU derecha',
+            bleDeviceConfig.sensorForType(BleSensorType.imuRight).label,
             _formatList(telemetry.imuRight),
           ),
           buildRow(
-            'Encoder izquierdo',
+            bleDeviceConfig.sensorForType(BleSensorType.encoderLeft).label,
             telemetry.encoderLeft?.toStringAsFixed(3) ?? '--',
           ),
           buildRow(
-            'Encoder derecho',
+            bleDeviceConfig.sensorForType(BleSensorType.encoderRight).label,
             telemetry.encoderRight?.toStringAsFixed(3) ?? '--',
           ),
           buildRow(
-            'Vector fuerzas',
+            bleDeviceConfig.sensorForType(BleSensorType.forceVector).label,
             _formatList(telemetry.forceVector),
           ),
         ],
@@ -260,5 +268,45 @@ class PerformanceTab extends ConsumerWidget {
       return '--';
     }
     return values.map((v) => v.toStringAsFixed(3)).join(', ');
+  }
+
+  Widget _buildDebugTelemetryLabel(BleReadings telemetry) {
+    final buffer = StringBuffer();
+    buffer.writeln('Última actualización: '
+        '${telemetry.timestamp.toLocal().toIso8601String()}');
+    if (telemetry.imuLeft != null) {
+      buffer.writeln('IMU L: ${_formatList(telemetry.imuLeft)}');
+    }
+    if (telemetry.imuRight != null) {
+      buffer.writeln('IMU R: ${_formatList(telemetry.imuRight)}');
+    }
+    if (telemetry.encoderLeft != null) {
+      buffer.writeln('Encoder L: ${telemetry.encoderLeft!.toStringAsFixed(3)}');
+    }
+    if (telemetry.encoderRight != null) {
+      buffer
+          .writeln('Encoder R: ${telemetry.encoderRight!.toStringAsFixed(3)}');
+    }
+    if (telemetry.forceVector != null) {
+      buffer.writeln('Fuerzas: ${_formatList(telemetry.forceVector)}');
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        buffer.toString().trim(),
+        style: const TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 12,
+          color: Colors.white,
+        ),
+      ),
+    );
   }
 }
