@@ -1,3 +1,5 @@
+import 'package:aquiles/config/ble_device_config.dart';
+
 class BleReadings {
   const BleReadings({
     this.imuLeft,
@@ -18,27 +20,57 @@ class BleReadings {
   static BleReadings empty() =>
       BleReadings(timestamp: DateTime.fromMillisecondsSinceEpoch(0));
 
-  BleReadings copyWith({
-    List<double>? imuLeft,
-    bool clearImuLeft = false,
-    List<double>? imuRight,
-    bool clearImuRight = false,
-    double? encoderLeft,
-    bool clearEncoderLeft = false,
-    double? encoderRight,
-    bool clearEncoderRight = false,
-    List<double>? forceVector,
-    bool clearForceVector = false,
-    DateTime? timestamp,
-  }) {
-    return BleReadings(
-      imuLeft: clearImuLeft ? null : imuLeft ?? this.imuLeft,
-      imuRight: clearImuRight ? null : imuRight ?? this.imuRight,
-      encoderLeft: clearEncoderLeft ? null : encoderLeft ?? this.encoderLeft,
-      encoderRight:
-          clearEncoderRight ? null : encoderRight ?? this.encoderRight,
-      forceVector: clearForceVector ? null : forceVector ?? this.forceVector,
-      timestamp: timestamp ?? this.timestamp,
-    );
+  BleReadings update(
+    BleSensorType sensor,
+    List<double> values,
+    DateTime newTimestamp,
+  ) {
+    switch (sensor) {
+      case BleSensorType.imuLeft:
+        return BleReadings(
+          imuLeft: values,
+          imuRight: imuRight,
+          encoderLeft: encoderLeft,
+          encoderRight: encoderRight,
+          forceVector: forceVector,
+          timestamp: newTimestamp,
+        );
+      case BleSensorType.imuRight:
+        return BleReadings(
+          imuLeft: imuLeft,
+          imuRight: values,
+          encoderLeft: encoderLeft,
+          encoderRight: encoderRight,
+          forceVector: forceVector,
+          timestamp: newTimestamp,
+        );
+      case BleSensorType.encoderLeft:
+        return BleReadings(
+          imuLeft: imuLeft,
+          imuRight: imuRight,
+          encoderLeft: values.isNotEmpty ? values.first : null,
+          encoderRight: encoderRight,
+          forceVector: forceVector,
+          timestamp: newTimestamp,
+        );
+      case BleSensorType.encoderRight:
+        return BleReadings(
+          imuLeft: imuLeft,
+          imuRight: imuRight,
+          encoderLeft: encoderLeft,
+          encoderRight: values.isNotEmpty ? values.first : null,
+          forceVector: forceVector,
+          timestamp: newTimestamp,
+        );
+      case BleSensorType.forceVector:
+        return BleReadings(
+          imuLeft: imuLeft,
+          imuRight: imuRight,
+          encoderLeft: encoderLeft,
+          encoderRight: encoderRight,
+          forceVector: values,
+          timestamp: newTimestamp,
+        );
+    }
   }
 }

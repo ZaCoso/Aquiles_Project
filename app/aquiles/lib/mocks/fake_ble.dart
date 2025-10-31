@@ -2,72 +2,25 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
+import 'package:aquiles/config/ble_device_config.dart';
 import 'package:aquiles/models/ble_readings.dart';
-import 'package:aquiles/services/ble_services.dart';
+import 'package:aquiles/services/ble_services.dart' show BleClient;
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
 /// In-memory stand-in for [BleService] used in unit and widget tests.
-class FakeBleService implements BleService {
+class FakeBleService implements BleClient {
   FakeBleService({
     Iterable<DiscoveredDevice> initialDevices = const [],
     this.autoEmitInitialResults = true,
     this.connectionDelay = Duration.zero,
-    Uuid? serviceUuid,
-    Uuid? commandUuid,
-    Uuid? imuLeftUuid,
-    Uuid? imuRightUuid,
-    Uuid? encoderLeftUuid,
-    Uuid? encoderRightUuid,
-    Uuid? forceUuid,
-  })  : serviceUuid = serviceUuid ?? Uuid.parse(_defaultServiceUuid),
-        commandUuid = commandUuid ?? Uuid.parse(_defaultCommandUuid),
-        imuLeftUuid = imuLeftUuid ?? Uuid.parse(_defaultImuLeftUuid),
-        imuRightUuid = imuRightUuid ?? Uuid.parse(_defaultImuRightUuid),
-        encoderLeftUuid =
-            encoderLeftUuid ?? Uuid.parse(_defaultEncoderLeftUuid),
-        encoderRightUuid =
-            encoderRightUuid ?? Uuid.parse(_defaultEncoderRightUuid),
-        forceUuid = forceUuid ?? Uuid.parse(_defaultForceUuid) {
+    BleDeviceConfig? config,
+  }) : config = config ?? bleDeviceConfig {
     for (final device in initialDevices) {
       _catalog[device.id] = device;
     }
   }
 
-  static const String _defaultServiceUuid =
-      '6e400010-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String _defaultCommandUuid =
-      '6e400020-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String _defaultImuLeftUuid =
-      '6e400021-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String _defaultImuRightUuid =
-      '6e400022-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String _defaultEncoderLeftUuid =
-      '6e400023-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String _defaultEncoderRightUuid =
-      '6e400024-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String _defaultForceUuid =
-      '6e400025-b5a3-f393-e0a9-e50e24dcca9e';
-
-  @override
-  final Uuid serviceUuid;
-
-  @override
-  final Uuid commandUuid;
-
-  @override
-  final Uuid imuLeftUuid;
-
-  @override
-  final Uuid imuRightUuid;
-
-  @override
-  final Uuid encoderLeftUuid;
-
-  @override
-  final Uuid encoderRightUuid;
-
-  @override
-  final Uuid forceUuid;
+  final BleDeviceConfig config;
 
   final bool autoEmitInitialResults;
   final Duration connectionDelay;
