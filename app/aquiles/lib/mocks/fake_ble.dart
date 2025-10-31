@@ -2,37 +2,25 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
-import 'package:aquiles/services/ble_services.dart';
+import 'package:aquiles/config/ble_device_config.dart';
+import 'package:aquiles/models/ble_readings.dart';
+import 'package:aquiles/services/ble_services.dart' show BleClient;
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
 /// In-memory stand-in for [BleService] used in unit and widget tests.
-class FakeBleService implements BleService {
+class FakeBleService implements BleClient {
   FakeBleService({
     Iterable<DiscoveredDevice> initialDevices = const [],
     this.autoEmitInitialResults = true,
     this.connectionDelay = Duration.zero,
-    Uuid? serviceUuid,
-    Uuid? txUuid,
-    Uuid? rxUuid,
-  })  : serviceUuid = serviceUuid ?? Uuid.parse(_defaultServiceUuid),
-        txUuid = txUuid ?? Uuid.parse(_defaultCharacteristicUuid),
-        rxUuid = rxUuid ?? Uuid.parse(_defaultCharacteristicUuid) {
+    BleDeviceConfig? config,
+  }) : config = config ?? bleDeviceConfig {
     for (final device in initialDevices) {
       _catalog[device.id] = device;
     }
   }
 
-  static const String _defaultServiceUuid = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-  static const String _defaultCharacteristicUuid = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
-
-  @override
-  final Uuid serviceUuid;
-
-  @override
-  final Uuid txUuid;
-
-  @override
-  final Uuid rxUuid;
+  final BleDeviceConfig config;
 
   final bool autoEmitInitialResults;
   final Duration connectionDelay;
@@ -41,8 +29,8 @@ class FakeBleService implements BleService {
   final Map<String, Queue<bool>> _connectionOutcomes = <String, Queue<bool>>{};
   final StreamController<DiscoveredDevice> _scanController =
       StreamController<DiscoveredDevice>.broadcast();
-  final StreamController<String> _notificationController =
-      StreamController<String>.broadcast();
+  final StreamController<BleReadings> _telemetryController =
+      StreamController<BleReadings>.broadcast();
   final List<String> _sentCommands = <String>[];
 
   String? _connectedDeviceId;
@@ -59,8 +47,8 @@ class FakeBleService implements BleService {
   /// Notifies when [send] is invoked.
   void Function(String command)? onSend;
 
-  /// Optional auto-reply for commands sent via [send].
-  String? Function(String command)? autoReply;
+  /// Optional auto-generated telemetry for commands sent via [send].
+  BleReadings? Function(String command)? autoTelemetry;
 
   bool get isConnected => _connectedDeviceId != null;
 
@@ -125,8 +113,10 @@ class FakeBleService implements BleService {
   }
 
   /// Queues deterministic results for [connectToDeviceId].
-  void queueConnectionResult({required String deviceId, required bool succeeds}) {
-    final queue = _connectionOutcomes.putIfAbsent(deviceId, () => Queue<bool>());
+  void queueConnectionResult(
+      {required String deviceId, required bool succeeds}) {
+    final queue =
+        _connectionOutcomes.putIfAbsent(deviceId, () => Queue<bool>());
     queue.addLast(succeeds);
   }
 
@@ -185,9 +175,9 @@ class FakeBleService implements BleService {
     }
     _sentCommands.add(command);
     onSend?.call(command);
-    final reply = autoReply?.call(command);
+    final reply = autoTelemetry?.call(command);
     if (reply != null) {
-      emitNotification(reply);
+      emitTelemetry(reply);
     }
   }
 
@@ -197,23 +187,24 @@ class FakeBleService implements BleService {
   }
 
   @override
-  Stream<String> getNotificationStream() {
+  Stream<BleReadings> telemetryStream() {
     _ensureActive();
-    return _notificationController.stream;
+    return _telemetryController.stream;
   }
 
-  /// Pushes a notification payload to listeners.
-  void emitNotification(String message) {
-    if (_notificationController.isClosed) {
+  /// Pushes a telemetry payload to listeners.
+  void emitTelemetry(BleReadings telemetry) {
+    if (_telemetryController.isClosed) {
       return;
     }
-    _notificationController.add(message);
+    _telemetryController.add(telemetry);
   }
 
-  /// Emits a list of notifications, optionally spacing them out.
-  Future<void> emitNotifications(Iterable<String> messages, {Duration delay = Duration.zero}) async {
-    for (final message in messages) {
-      emitNotification(message);
+  /// Emits a list of telemetry frames, optionally spacing them out.
+  Future<void> emitTelemetries(Iterable<BleReadings> frames,
+      {Duration delay = Duration.zero}) async {
+    for (final telemetry in frames) {
+      emitTelemetry(telemetry);
       if (delay > Duration.zero) {
         await Future<void>.delayed(delay);
       }
@@ -242,8 +233,8 @@ class FakeBleService implements BleService {
     if (!_scanController.isClosed) {
       await _scanController.close();
     }
-    if (!_notificationController.isClosed) {
-      await _notificationController.close();
+    if (!_telemetryController.isClosed) {
+      await _telemetryController.close();
     }
   }
 

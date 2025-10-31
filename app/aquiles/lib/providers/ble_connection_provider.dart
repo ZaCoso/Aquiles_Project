@@ -1,4 +1,5 @@
 // lib/providers/ble_connection_provider.dart
+import 'package:aquiles/config/ble_device_config.dart';
 import 'package:aquiles/services/ble_services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'ble_provider.dart';
@@ -14,12 +15,13 @@ class BleConnectionNotifier extends StateNotifier<BleConnectionState> {
   BleConnectionNotifier(this._bleService)
       : super(BleConnectionState.disconnected);
 
-  final BleService _bleService;
+  final BleClient _bleService;
 
   Future<void> connect() async {
     state = BleConnectionState.connecting;
     try {
-      final success = await _bleService.connectToDevice("Aquiles X1");
+      final success =
+          await _bleService.connectToDevice(bleDeviceConfig.deviceName);
       state = success ? BleConnectionState.connected : BleConnectionState.error;
     } catch (_) {
       state = BleConnectionState.error;

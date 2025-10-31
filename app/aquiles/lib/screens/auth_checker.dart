@@ -2,7 +2,6 @@ import 'package:aquiles/providers/auth_provider.dart';
 import 'package:aquiles/screens/home_screen.dart';
 import 'package:aquiles/screens/login_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AuthChecker extends ConsumerWidget {
