@@ -265,10 +265,11 @@ class _InstructionStepCard extends StatelessWidget {
 }
 
 class _InstructionVideoPlayer extends StatefulWidget {
-  const _InstructionVideoPlayer({super.key});
+  const _InstructionVideoPlayer();
 
   @override
-  State<_InstructionVideoPlayer> createState() => _InstructionVideoPlayerState();
+  State<_InstructionVideoPlayer> createState() =>
+      _InstructionVideoPlayerState();
 }
 
 class _InstructionVideoPlayerState extends State<_InstructionVideoPlayer>

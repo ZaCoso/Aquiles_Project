@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:aquiles/providers/ble_connection_provider.dart';
 
 class StatusTab extends ConsumerWidget {
-  const StatusTab({Key? key}) : super(key: key);
+  const StatusTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -108,38 +108,38 @@ class StatusTab extends ConsumerWidget {
                     height: 240,
                   ),
                 ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () async {
-                await ref.read(bleConnectionProvider.notifier).disconnect();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF3F797A),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Desconectar',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildInfoCard(
-                context,
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  await ref.read(bleConnectionProvider.notifier).disconnect();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3F797A),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Desconectar',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildInfoCard(
+                  context,
                   Icons.battery_full,
                   '85%',
                   'Batería',
@@ -196,7 +196,7 @@ class StatusTab extends ConsumerWidget {
                 Switch(
                   value: false,
                   onChanged: (value) {},
-                  activeColor: const Color(0xFF8CCBD5),
+                  activeThumbColor: const Color(0xFF8CCBD5),
                   activeTrackColor: const Color(0xFF3F797A),
                   inactiveThumbColor: Colors.white,
                   inactiveTrackColor: const Color(0xFF3F797A).withOpacity(0.5),

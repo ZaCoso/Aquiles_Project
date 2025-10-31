@@ -25,7 +25,7 @@ class AuthServices {
       } else if (e.code == 'wrong-password') {
         print('Wrong password provided for that user.');
       }
-      throw e;
+      rethrow;
     }
   }
 
@@ -33,7 +33,7 @@ class AuthServices {
     if (firebaseAuth.currentUser == null) {
       return null;
     }
-    return await firebaseAuth.currentUser?.uid;
+    return firebaseAuth.currentUser?.uid;
   }
 
   Future<User?> signInWithGoogle() async {

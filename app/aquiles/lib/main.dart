@@ -31,7 +31,7 @@ void main() async {
 }
 
 class AquilesApp extends StatelessWidget {
-  AquilesApp({Key? key}) : super(key: key);
+  const AquilesApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -54,11 +54,9 @@ class AquilesApp extends StatelessWidget {
         colorScheme: ColorScheme.dark(
           primary: const Color(0xFF8CCBD5),
           secondary: const Color(0xFF3F797A),
-          background: const Color(0xFF0A1128),
           surface: const Color(0xFF295B62).withOpacity(0.5),
           onPrimary: const Color(0xFFFFFFFA),
           onSecondary: const Color(0xFFFFFFFA),
-          onBackground: const Color(0xFFFFFFFA),
           onSurface: const Color(0xFFFFFFFA),
         ),
       ),
