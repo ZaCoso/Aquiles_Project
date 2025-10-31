@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AuthServices {
   FirebaseAuth firebaseAuth;
@@ -12,7 +11,7 @@ class AuthServices {
   Stream<User?> get authStateChanges => firebaseAuth.authStateChanges();
   Future<User?> signIn(String email, String password) async {
     try {
-      final result = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final result = await firebaseAuth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
@@ -24,6 +23,32 @@ class AuthServices {
         print('No user found for that email.');
       } else if (e.code == 'wrong-password') {
         print('Wrong password provided for that user.');
+      }
+      rethrow;
+    }
+  }
+
+  Future<User?> register(String email, String password) async {
+    try {
+      final result = await firebaseAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      print('User registered: ${result.user?.email}');
+      return result.user;
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'email-already-in-use':
+          print('Email already in use.');
+          break;
+        case 'invalid-email':
+          print('Invalid email.');
+          break;
+        case 'weak-password':
+          print('Weak password provided.');
+          break;
+        default:
+          print('Registration error: ${e.code}');
       }
       rethrow;
     }
