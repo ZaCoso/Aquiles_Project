@@ -20,6 +20,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
   @override
   Widget build(BuildContext context) {
     final ble = ref.watch(bleConnectionProvider.notifier);
+    final bleState = ref.watch(bleConnectionProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Container(
@@ -105,6 +106,24 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                 ),
               ),
             ),
+            if (bleState == BleConnectionState.connected) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await ble.disconnect();
+                  },
+                  icon: const Icon(Icons.power_settings_new),
+                  label: const Text('Desconectar exoesqueleto'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF8CCBD5),
+                    side: const BorderSide(color: Color(0xFF3F797A)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
