@@ -21,7 +21,7 @@ namespace Aquiles {
     // Device identity & BLE UUIDs
     // =========================================================
     // Name shown over BLE scanning
-    inline constexpr char DEVICE_NAME[] = "Aquiles X1";
+    extern const char DEVICE_NAME[];
 
     // Main BLE service for this device
     constexpr const char* SERVICE_UUID   = "6e400010-b5a3-f393-e0a9-e50e24dcca9e";

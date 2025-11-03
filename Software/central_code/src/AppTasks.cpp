@@ -2,6 +2,8 @@
 #include <cmath>
 #include <esp_timer.h>  // for esp_timer_get_time() on ESP32
 
+const char Aquiles::DEVICE_NAME[] = "Aquiles X1";
+
 namespace Aquiles {
 
 // =========================================================
