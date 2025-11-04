@@ -1,887 +1,1020 @@
 #include "AppTasks.h"
+#include <cmath>
+#include <esp_timer.h>  // for esp_timer_get_time() on ESP32
+
+const char Aquiles::DEVICE_NAME[] = "Aquiles X1";
 
 namespace Aquiles {
-    namespace Detection {
-    
-      // ========= Estado interno =========
-      static GlobalCfg CFG;
 
-      static QueueHandle_t qInL = nullptr;   // cola de entrada (prof 1, overwrite)
-      static QueueHandle_t qInR = nullptr;
+// =========================================================
+// 1. DETECTION / GAIT PLANNER IMPLEMENTATION
+// =========================================================
+namespace Detection {
 
-      static LegSignals SIG_L, SIG_R;        // señales derivadas
-      static CmdOut     CMD_L, CMD_R;        // salida final (suavizada)
-      static float      sp_cur_L = 0.0f, sp_cur_R = 0.0f;
+    // ----- Internal state for this module -----
+    static GlobalCfg CFG;        // current configuration
 
-      // Hint bilateral (opcional)
-      static bool contra_hint_L = true;  // “R en stance”
-      static bool contra_hint_R = true;  // “L en stance”
+    // one inbound queue per leg (depth 1, overwrite)
+    static QueueHandle_t qInL = nullptr;
+    static QueueHandle_t qInR = nullptr;
 
-      // ========= Helpers =========
-      static inline uint32_t micros32(){ return (uint32_t)micros(); }
-      static inline float unwrap(float th, float th_prev){
-        
+    // fused signals per leg
+    static LegSignals SIG_L, SIG_R;
+    // final commands per leg
+    static CmdOut     CMD_L, CMD_R;
+    // per-leg smoothed setpoints
+    static float      sp_cur_L = 0.0f, sp_cur_R = 0.0f;
+
+    // bilateral swing/stance hint (optional)
+    static bool contra_hint_L = true;  // “R is in stance”
+    static bool contra_hint_R = true;  // “L is in stance”
+
+    // angle targets per leg
+    static float theta_ref_L = 0.0f;
+    static float theta_ref_R = 0.0f;
+
+    // ----- Small helpers -----
+    static inline uint32_t micros32() { return (uint32_t)micros(); }
+
+    // unwrap angle to avoid jumps of ±pi
+    static inline float unwrap(float th, float th_prev) {
         float d = th - th_prev;
-        while(d >  (float)M_PI) d -= 2.f*(float)M_PI;
-        while(d < -(float)M_PI) d += 2.f*(float)M_PI;
+        while (d >  (float)M_PI) d -= 2.f * (float)M_PI;
+        while (d < -(float)M_PI) d += 2.f * (float)M_PI;
         return th_prev + d;
-      }
+    }
 
-      static float theta_ref_L = 0.0f;
-      static float theta_ref_R = 0.0f;
+    // generic slew-rate limiter
+    static inline float slew(float target, float current, float max_delta){
+        float d = target - current;
+        if (d >  max_delta) d =  max_delta;
+        if (d < -max_delta) d = -max_delta;
+        return current + d;
+    }
 
-      void setAngleTarget(Leg leg, float theta_ref_rad) {
+    // clamp helper
+    static inline float clamp(float v, float lo, float hi){
+        return (v < lo) ? lo : (v > hi) ? hi : v;
+    }
+
+    // public: set angle target per leg
+    void setAngleTarget(Leg leg, float theta_ref_rad) {
         if (leg == Leg::L) theta_ref_L = theta_ref_rad;
         else               theta_ref_R = theta_ref_rad;
-      }
+    }
 
-
-      float getAngleTarget(Leg leg){
+    // public: get angle target per leg
+    float getAngleTarget(Leg leg){
         return (leg == Leg::L) ? theta_ref_L : theta_ref_R;
-      }
+    }
 
-       // namespaces
-      static inline float slew(float target, float current, float max_delta){
-        float d = target - current;
-        if(d >  max_delta) d =  max_delta;
-        if(d < -max_delta) d = -max_delta;
-        return current + d;
-      }
-      static inline float clamp(float v, float lo, float hi){
-        return (v<lo)?lo:(v>hi)?hi:v;
-      }
-
-      // ========= Intención & Planner (plantillas) =========
-      static IntentOut detectIntent(const LegSignals& s_i,
-                                    const LegSignals& s_contra,
-                                    const IntentCfg& icfg,
-                                    bool contra_stance_hint)
-      {
-        // Evidencias mínimas: velocidad angular y/o pulso inercial
+    // ----- Intention detection -----
+    // very simple: enough movement on this leg + contralateral quiet
+    static IntentOut detectIntent(const LegSignals& s_i,
+                                  const LegSignals& s_contra,
+                                  const IntentCfg& icfg,
+                                  bool contra_stance_hint)
+    {
+        // movement evidence (angular vel and/or accel)
         bool geom   = (fabsf(s_i.omega) >= icfg.omega_min);
         bool inert  = (fabsf(s_i.a_fwd_g) >= icfg.acc_min_g) || geom;
+        // contralateral stance evidence
         bool contra = contra_stance_hint || (fabsf(s_contra.omega) < 0.2f);
-
-        // La persistencia t_win/t_hold la podés implementar después con contadores.
+        // temporal persistence (you can add counters later)
         bool persist= true;
 
         IntentOut out;
         out.enable = (geom && inert && contra && persist);
         out.phase  = out.enable ? Phase::SWING : Phase::STANCE;
         return out;
-      }
-      static CmdOut planner_angleP(const IntentOut& I,
-                                  const LegSignals& s,
-                                  const LimitsCfg& lims,
-                                  const GlobalCfg& C,
-                                  float& sp_accum /*estado del smoother*/)
-      {
-        float theta_ref = (&s==&SIG_L) ? theta_ref_L : theta_ref_R;  // truco si lo dejás así
+    }
+
+    // ----- Planner: angle-P → joint velocity -----
+    static CmdOut planner_angleP(const IntentOut& /*I*/,
+                                 const LegSignals& s,
+                                 const LimitsCfg& lims,
+                                 const GlobalCfg& C,
+                                 float& sp_accum)
+    {
+        // find which leg this signal struct belongs to
+        float theta_ref = (&s == &SIG_L) ? theta_ref_L : theta_ref_R;
+
+        // angle error
         float err = theta_ref - s.theta;
 
-        // Ventana articular: si estás fuera, clamp al borde (protección suave)
-        if (s.theta < lims.pos_min)    err = lims.pos_min - s.theta;
-        if (s.theta > lims.pos_max)    err = lims.pos_max - s.theta;
+        // soft joint window
+        if (s.theta < lims.pos_min) err = lims.pos_min - s.theta;
+        if (s.theta > lims.pos_max) err = lims.pos_max - s.theta;
 
-        // Deadband para evitar caza
+        // deadband to prevent hunting
         if (fabsf(err) < C.angle.deadband_rad) err = 0.0f;
 
-        // P puro: velocidad articular deseada
+        // P controller → desired joint velocity
         float v_joint = C.angle.kp_vel * err;
         v_joint = clamp(v_joint, -C.angle.vmax_joint, C.angle.vmax_joint);
 
-        // Suavizado (slew) de la velocidad articular
-        sp_accum = slew(v_joint, sp_accum, C.slew_per_tick);  // sp_accum ahora es v_joint_suavizada
+        // smooth the velocity with a per-tick slew
+        sp_accum = slew(v_joint, sp_accum, C.slew_per_tick);
 
+        // build command
         CmdOut out;
-        out.mode     = Mode::VELOCITY;     // <--- importante: modo VELOCIDAD
-        out.setpoint = sp_accum;           // <-- [rad/s] ARTICULAR
+        out.mode     = Mode::VELOCITY;
+        out.setpoint = sp_accum;
         return out;
-      }
+    }
 
-      // ========= Tareas =========
+    // ----- Task: fusion (1 kHz) -----
+    // pulls latest samples for each leg and computes theta/omega
+    static void taskFusion(void*){
+        float    thL_prev = 0.0f, thR_prev = 0.0f;
+        uint32_t tsL_prev = 0,     tsR_prev = 0;
+        TickType_t last   = xTaskGetTickCount();
 
-      // Fusion: deriva ω a partir del encoder y mantiene señales (1 kHz)
-      static void taskFusion(void*){
-        float thL_prev = 0.0f, thR_prev = 0.0f;
-        uint32_t tsL_prev = 0, tsR_prev = 0;
-
-        TickType_t last = xTaskGetTickCount();
         for(;;){
-          // LEFT
-          SampleIn inL;
-          if (xQueueReceive(qInL, &inL, 0)==pdTRUE){
-            // timestamp seguro
-            uint32_t ts = inL.ts_us ? inL.ts_us : micros32();
+            // ---- LEFT LEG ----
+            SampleIn inL;
+            if (xQueueReceive(qInL, &inL, 0) == pdTRUE){
+                uint32_t ts = inL.ts_us ? inL.ts_us : micros32();
 
-            // Si viene un ángulo, actualizamos theta/omega
-            if (!isnan(inL.theta_rad)){
-              float th = unwrap(inL.theta_rad, thL_prev);
-              float dt = (tsL_prev==0) ? 0.001f : (float)(ts - tsL_prev)/1e6f;
-              if (dt <= 0) dt = 1e-3f;
-              float w  = (th - thL_prev)/dt;
+                // update angle & omega
+                if (!isnan(inL.theta_rad)){
+                    float th = unwrap(inL.theta_rad, thL_prev);
+                    float dt = (tsL_prev==0) ? 0.001f : (float)(ts - tsL_prev)/1e6f;
+                    if (dt <= 0) dt = 1e-3f;
+                    float w  = (th - thL_prev)/dt;
 
-              SIG_L.theta = th;
-              SIG_L.omega = w;
-              thL_prev = th; tsL_prev = ts;
+                    SIG_L.theta = th;
+                    SIG_L.omega = w;
+                    thL_prev = th; tsL_prev = ts;
+                }
+
+                // update accel if present
+                if (!isnan(inL.accel_fwd_g)) SIG_L.a_fwd_g = inL.accel_fwd_g;
+                // mark coh flag if IMU was saturated
+                if (inL.imu_sat) SIG_L.coh_ok = false;
+
+                SIG_L.rx_us = ts;
             }
 
-            // Si viene aceleración, la actualizamos
-            if (!isnan(inL.accel_fwd_g)) SIG_L.a_fwd_g = inL.accel_fwd_g;
+            // ---- RIGHT LEG ----
+            SampleIn inR;
+            if (xQueueReceive(qInR, &inR, 0) == pdTRUE){
+                uint32_t ts = inR.ts_us ? inR.ts_us : micros32();
 
-            // Si viene flag de saturación IMU, actualizamos
-            if (inL.imu_sat) SIG_L.coh_ok = false;
+                if (!isnan(inR.theta_rad)){
+                    float th = unwrap(inR.theta_rad, thR_prev);
+                    float dt = (tsR_prev==0) ? 0.001f : (float)(ts - tsR_prev)/1e6f;
+                    if (dt <= 0) dt = 1e-3f;
+                    float w  = (th - thR_prev)/dt;
 
-            SIG_L.rx_us = ts;
-          }
+                    SIG_R.theta = th;
+                    SIG_R.omega = w;
+                    thR_prev = th; tsR_prev = ts;
+                }
 
-          // RIGHT
-          SampleIn inR;
-          if (xQueueReceive(qInR, &inR, 0)==pdTRUE){
-            uint32_t ts = inR.ts_us ? inR.ts_us : micros32();
+                if (!isnan(inR.accel_fwd_g)) SIG_R.a_fwd_g = inR.accel_fwd_g;
+                if (inR.imu_sat) SIG_R.coh_ok = false;
 
-            if (!isnan(inR.theta_rad)){
-              float th = unwrap(inR.theta_rad, thR_prev);
-              float dt = (tsR_prev==0) ? 0.001f : (float)(ts - tsR_prev)/1e6f;
-              if (dt <= 0) dt = 1e-3f;
-              float w  = (th - thR_prev)/dt;
-
-              SIG_R.theta = th;
-              SIG_R.omega = w;
-              thR_prev = th; tsR_prev = ts;
+                SIG_R.rx_us = ts;
             }
 
-            if (!isnan(inR.accel_fwd_g)) SIG_R.a_fwd_g = inR.accel_fwd_g;
-            if (inR.imu_sat) SIG_R.coh_ok = false;
-
-            SIG_R.rx_us = ts;
-          }
-          vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.fusion_period_ms));
+            vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.fusion_period_ms));
         }
-      }
+    }
 
-      // Planner + Smoother (1 kHz)
-      static void taskPlanner(void*){
+    // ----- Task: planner (1 kHz) -----
+    static void taskPlanner(void*){
         TickType_t last = xTaskGetTickCount();
         for(;;){
-          // Intención bilateral (hint evita doble-swing)
-          IntentOut IL = detectIntent(SIG_L, SIG_R, CFG.intent, contra_hint_L);
-          IntentOut IR = detectIntent(SIG_R, SIG_L, CFG.intent, contra_hint_R);
+            // intention on both legs (using bilateral hint)
+            IntentOut IL = detectIntent(SIG_L, SIG_R, CFG.intent, contra_hint_L);
+            IntentOut IR = detectIntent(SIG_R, SIG_L, CFG.intent, contra_hint_R);
 
-          // Planner por pierna
-          CMD_L = planner_angleP(IL, SIG_L, CFG.limits, CFG, sp_cur_L);
-          CMD_R = planner_angleP(IR, SIG_R, CFG.limits, CFG, sp_cur_R);
-          vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.planner_period_ms));
+            // per-leg planning
+            CMD_L = planner_angleP(IL, SIG_L, CFG.limits, CFG, sp_cur_L);
+            CMD_R = planner_angleP(IR, SIG_R, CFG.limits, CFG, sp_cur_R);
+
+            vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.planner_period_ms));
         }
-      }
+    }
 
-      // Logger (50 Hz por defecto)
-      static void taskLogger(void*){
+    // ----- Task: logger (50 Hz) -----
+    static void taskLogger(void*){
         TickType_t last = xTaskGetTickCount();
         for(;;){
-          // Ejemplo de log:
-          // Serial.printf("L th=%.2f w=%.2f | R th=%.2f w=%.2f | spL=%.2f spR=%.2f\n",
-          //   SIG_L.theta, SIG_L.omega, SIG_R.theta, SIG_R.omega, CMD_L.setpoint, CMD_R.setpoint);
-          vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.logger_period_ms));
+            // Uncomment for debugging
+            // Serial.printf("L th=%.2f w=%.2f | R th=%.2f w=%.2f | spL=%.2f spR=%.2f\n",
+            //   SIG_L.theta, SIG_L.omega, SIG_R.theta, SIG_R.omega, CMD_L.setpoint, CMD_R.setpoint);
+            vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.logger_period_ms));
         }
-      }
+    }
 
-      // ========= API =========
-      void begin(const GlobalCfg& cfg){
+    // ----- Public entry point -----
+    void begin(const GlobalCfg& cfg){
         CFG = cfg;
 
-        // Colas de entrada (prof 1, overwrite)
+        // create inbound queues (one per leg)
         qInL = xQueueCreate(1, sizeof(SampleIn));
         qInR = xQueueCreate(1, sizeof(SampleIn));
 
-        // Tareas internas (pinned a los cores como en tu estilo)
+        // spawn internal tasks
         xTaskCreatePinnedToCore(taskFusion,  "Fusion",  3072, nullptr, 4, nullptr, 1);
         xTaskCreatePinnedToCore(taskPlanner, "Planner", 4096, nullptr, 3, nullptr, 1);
         xTaskCreatePinnedToCore(taskLogger,  "Logger",  2048, nullptr, 1, nullptr, 0);
-      }
+    }
 
-      void pushSample(Leg leg, const SampleIn& s){
-        if (leg==Leg::L)  xQueueOverwrite(qInL, &s);
-        else              xQueueOverwrite(qInR, &s);
-      }
+    void pushSample(Leg leg, const SampleIn& s){
+        // overwrite so the latest sample always wins
+        if (leg == Leg::L) xQueueOverwrite(qInL, &s);
+        else               xQueueOverwrite(qInR, &s);
+    }
 
-      const LegSignals& getSignals(Leg leg){
-        return (leg==Leg::L) ? SIG_L : SIG_R;
-      }
+    const LegSignals& getSignals(Leg leg){
+        return (leg == Leg::L) ? SIG_L : SIG_R;
+    }
 
-      CmdOut getCmd(Leg leg){
-        return (leg==Leg::L) ? CMD_L : CMD_R;
-      }
+    CmdOut getCmd(Leg leg){
+        return (leg == Leg::L) ? CMD_L : CMD_R;
+    }
 
-      void setLimits(const LimitsCfg& lims){ CFG.limits = lims; }
-      void setIntentCfg(const IntentCfg& icfg){ CFG.intent = icfg; }
-      void setSlew(float slew_per_tick){ CFG.slew_per_tick = slew_per_tick; }
+    void setLimits(const LimitsCfg& lims){ CFG.limits = lims; }
+    void setIntentCfg(const IntentCfg& icfg){ CFG.intent = icfg; }
+    void setSlew(float slew_per_tick){ CFG.slew_per_tick = slew_per_tick; }
 
-      void setContraStanceHint(Leg leg_in_swing, bool contralateral_is_in_stance){
-        if (leg_in_swing==Leg::L) contra_hint_L = contralateral_is_in_stance;
-        else                      contra_hint_R = contralateral_is_in_stance;
-      }
+    void setContraStanceHint(Leg leg_in_swing, bool contralateral_is_in_stance){
+        if (leg_in_swing == Leg::L) contra_hint_L = contralateral_is_in_stance;
+        else                        contra_hint_R = contralateral_is_in_stance;
+    }
 
-    } // namespace Detection
-        // ================= BLE =================
-    namespace BLE {
+} // namespace Detection
 
-      // ===== Punteros a características (definiciones) =====
-      BLECharacteristic* chIMU_L = nullptr;
-      BLECharacteristic* chIMU_R = nullptr;
-      BLECharacteristic* chENC_L = nullptr;
-      BLECharacteristic* chENC_R = nullptr;
-      BLECharacteristic* chF_3   = nullptr;
 
-      volatile bool deviceConnected = false;
-      std::string lastValue = "0";
 
-      // ===== Tipos de payload compactos =====
-      #pragma pack(push,1)
-      struct IMU6F  { float ax, ay, az, gx, gy, gz; };
-      struct ONEF   { float a; };
-      struct THREEF { float a, b, c; };
-      #pragma pack(pop)
+// =========================================================
+// 2. BLE IMPLEMENTATION
+// =========================================================
+namespace BLE {
 
-      // ===== Callbacks =====
-      // Implementación de métodos declarados en AppTasks.h
-      void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
+    // exposed in header
+    BLECharacteristic* chIMU_L = nullptr;
+    BLECharacteristic* chIMU_R = nullptr;
+    BLECharacteristic* chENC_L = nullptr;
+    BLECharacteristic* chENC_R = nullptr;
+    BLECharacteristic* chF_3   = nullptr;
+
+    volatile bool deviceConnected = false;
+    std::string   lastValue = "0";
+
+    // Optional compact payloads (not used in string example)
+    #pragma pack(push,1)
+    struct IMU6F  { float ax, ay, az, gx, gy, gz; };
+    struct ONEF   { float a; };
+    struct THREEF { float a, b, c; };
+    #pragma pack(pop)
+
+    // called when phone writes to a characteristic
+    void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
         std::string value = std::string(pCharacteristic->getValue().c_str());
         if (!value.empty()) {
-          Serial.print("Recibido via BLE: ");
-          Serial.println(value.c_str());
-          lastValue = value;
+            Serial.print("BLE RX: ");
+            Serial.println(value.c_str());
+            lastValue = value;
         }
-      }
+    }
 
-      void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
+    void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
         deviceConnected = true;
-        Serial.println("Dispositivo conectado");
-      }
+        Serial.println("BLE: device connected");
+    }
 
-      void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
+    void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
         deviceConnected = false;
-        Serial.println("Dispositivo desconectado");
-      }
+        Serial.println("BLE: device disconnected");
+    }
 
-      // ===== Helper para crear características READ+NOTIFY (y opcional WRITE) =====
-      static BLECharacteristic* mkChr(BLEService* svc, const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
+    // creates a characteristic with READ + NOTIFY (+ WRITE if needed)
+    static BLECharacteristic* mkChr(BLEService* svc, const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
         uint32_t props = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY;
         if (writable) props |= BLECharacteristic::PROPERTY_WRITE;
+
         BLECharacteristic* ch = svc->createCharacteristic(uuid, props);
 
-        // CCCD (iOS necesita descriptor para habilitar notify)
+        // add CCCD so iOS/Android can enable notifications
         auto* cccd = new BLE2902();
         cccd->setNotifications(true);
         ch->addDescriptor(cccd);
 
         if (cbs) ch->setCallbacks(cbs);
         return ch;
-      }
+    }
 
-      // ====== Tarea de notificaciones periódicas ======
-      void TaskNotify(void*) {
-        // MTU grande para permitir payloads de hasta ~180 bytes si hiciera falta
-        BLEDevice::setMTU(185);
-        const TickType_t period = pdMS_TO_TICKS(50); // 20 Hz
-        for (;;) {
-          if (deviceConnected) {
-            // --- Señales derivadas ---
-            const auto& SL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
-            const auto& SR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
+    // periodic notify task (20 Hz)
+    void TaskNotify(void*) {
+        BLEDevice::setMTU(185);                // allow big-ish payloads
+        const TickType_t period = pdMS_TO_TICKS(50);
+        for(;;){
+            if (deviceConnected) {
+                // pull signals from detection
+                const auto& SL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
+                const auto& SR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
 
-            // ===== Encoder L =====
-            if (chENC_L) {
-              char msg[32];
-              snprintf(msg, sizeof(msg), "EncL: %.2f rad", SL.theta);
-              chENC_L->setValue(msg);
-              chENC_L->notify();
+                // encoder left
+                if (chENC_L) {
+                    char msg[32];
+                    snprintf(msg, sizeof(msg), "EncL: %.2f rad", SL.theta);
+                    chENC_L->setValue(msg);
+                    chENC_L->notify();
+                }
+
+                // encoder right
+                if (chENC_R) {
+                    char msg[32];
+                    snprintf(msg, sizeof(msg), "EncR: %.2f rad", SR.theta);
+                    chENC_R->setValue(msg);
+                    chENC_R->notify();
+                }
+
+                // IMU left (forward accel + omega)
+                if (chIMU_L) {
+                    char msg[32];
+                    snprintf(msg, sizeof(msg), "IMUL: a=%.2fg w=%.2f", SL.a_fwd_g, SL.omega);
+                    chIMU_L->setValue(msg);
+                    chIMU_L->notify();
+                }
+
+                // IMU right
+                if (chIMU_R) {
+                    char msg[32];
+                    snprintf(msg, sizeof(msg), "IMUR: a=%.2fg w=%.2f", SR.a_fwd_g, SR.omega);
+                    chIMU_R->setValue(msg);
+                    chIMU_R->notify();
+                }
+
+                // cell voltages
+                if (chF_3) {
+                    char msg[64];
+                    float c1 = Power::getCellV(0);
+                    float c2 = Power::getCellV(1);
+                    float c3 = Power::getCellV(2);
+                    float c4 = Power::getCellV(3);
+                    snprintf(msg, sizeof(msg), "C1=%.3fV C2=%.3fV C3=%.3fV C4=%.3fV\n", c1,c2,c3,c4);
+                    chF_3->setValue(msg);
+                    chF_3->notify();
+                }
             }
-
-            // ===== Encoder R =====
-            if (chENC_R) {
-              char msg[32];
-              snprintf(msg, sizeof(msg), "EncR: %.2f rad", SR.theta);
-              chENC_R->setValue(msg);
-              chENC_R->notify();
-            }
-
-            // ===== IMU L =====
-            if (chIMU_L) {
-              char msg[32];
-              snprintf(msg, sizeof(msg), "IMUL: a=%.2fg w=%.2f", SL.a_fwd_g, SL.omega);
-              chIMU_L->setValue(msg);
-              chIMU_L->notify();
-            }
-
-            // ===== IMU R =====
-            if (chIMU_R) {
-              char msg[32];
-              snprintf(msg, sizeof(msg), "IMUR: a=%.2fg w=%.2f", SR.a_fwd_g, SR.omega);
-              chIMU_R->setValue(msg);
-              chIMU_R->notify();
-            }
-
-
-            if (chF_3) {
-              char msg[32];
-              float c1 = Power::getCellV(0);
-              float c2 = Power::getCellV(1);
-              float c3 = Power::getCellV(2);
-              float c4 = Power::getCellV(3);
-              snprintf(msg, sizeof(msg), "C1=%.3fV C2=%.3fV C3=%.3fV C4=%.3fV\n", c1,c2,c3,c4);
-              chF_3->setValue(msg);
-              chF_3->notify();
-            }
-          }
-          vTaskDelay(period);
+            vTaskDelay(period);
         }
-      }
+    }
 
-      // ====== Inicialización BLE (servicio + características + task) ======
-      void init() {
-        // IMPORTANTE: DEVICE_NAME debe existir (lo tenés como "Aquiles X1" en tu código)
+    // full BLE init: server, service, characteristics, advertising, notify task
+    void init() {
+        // start BLE with device name
         BLEDevice::init(DEVICE_NAME);
 
+        // create server and set callbacks
         BLEServer* pServer = BLEDevice::createServer();
         pServer->setCallbacks(new MyServerCallbacks());
 
+        // create service
         BLEService* pService = pServer->createService(SERVICE_UUID);
 
-        // Crear características exactamente con tus UUIDs
+        // create all characteristics we want
         chIMU_L = mkChr(pService, CHR_IMU_L_UUID);
         chIMU_R = mkChr(pService, CHR_IMU_R_UUID);
         chENC_L = mkChr(pService, CHR_ENC_L_UUID);
         chENC_R = mkChr(pService, CHR_ENC_R_UUID);
         chF_3   = mkChr(pService, CHR_F_3_UUID);
 
-        // Valores iniciales (cero seguro)
+        // set initial values (zeros)
         {
-          IMU6F  z6{}; ONEF z1{}; THREEF z3{};
-          if (chIMU_L) chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
-          if (chIMU_R) chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
-          if (chENC_L) chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
-          if (chENC_R) chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
-          if (chF_3)   chF_3  ->setValue((uint8_t*)&z3, sizeof(z3));
+            IMU6F  z6{}; ONEF z1{}; THREEF z3{};
+            if (chIMU_L) chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
+            if (chIMU_R) chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
+            if (chENC_L) chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
+            if (chENC_R) chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
+            if (chF_3)   chF_3  ->setValue((uint8_t*)&z3, sizeof(z3));
         }
 
+        // start service & advertising
         pService->start();
-
         BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(SERVICE_UUID);
         pAdvertising->setScanResponse(true);
         pAdvertising->start();
 
-        Serial.println("[BLE] Servicio listo y anunciando");
+        Serial.println("[BLE] Service started & advertising");
 
-        // Task de notificación
+        // create notify task
         xTaskCreatePinnedToCore(
-          TaskNotify, "BLE_NOTIFY",
-          4096, nullptr,
-          1, nullptr,
-          1  // core 1 como en tu estilo
+            TaskNotify,
+            "BLE_NOTIFY",
+            4096,
+            nullptr,
+            1,
+            nullptr,
+            1
         );
-      }
-
-      // ====== “enviarEstado” minimalista (usa chF_3: 3 floats) ======
-      void enviarEstado() {
-        if (!deviceConnected || !chF_3) return;
-        THREEF f3{ Aquiles::Power::getPackSOC(),
-                  Aquiles::Power::getPackSOCmin(),
-                  1.0f /* placeholder “health” */ };
-        chF_3->setValue((uint8_t*)&f3, sizeof(f3));
-        chF_3->notify();
-      }
-
-    } // namespace BLE
-    // ================= TAREAS BÁSICAS =================
-    namespace Tasks {
-        void Init(void* /*params*/) {
-            pinMode(9, OUTPUT);
-            vTaskDelete(nullptr);
-        }
-
-        void Blink(void* /*params*/) {
-            for (;;) {
-                digitalWrite(9, !digitalRead(9));
-                Serial.printf("Rk.Test1\r\n");
-                vTaskDelay(pdMS_TO_TICKS(500));
-            }
-        }
     }
 
-    namespace UARTDual {
+    // tiny helper to send 3 floats
+    void enviarEstado() {
+        if (!deviceConnected || !chF_3) return;
+        THREEF f3{ Power::getPackSOC(),
+                   Power::getPackSOCmin(),
+                   1.0f /* placeholder health */ };
+        chF_3->setValue((uint8_t*)&f3, sizeof(f3));
+        chF_3->notify();
+    }
 
-    // =================== CONFIG GLOBAL ===================
+} // namespace BLE
+
+
+
+// =========================================================
+// 3. UARTDUAL IMPLEMENTATION
+// =========================================================
+namespace UARTDual {
+
+    // UART config
     static constexpr uint32_t UART_BAUD = 2000000; // 2 Mbps
 
-    // ---- Enlace L (Serial1) ----
+    // pins for each link
     static constexpr int L_TX = 5;
     static constexpr int L_RX = 6;
-
-    // ---- Enlace R (Serial2) ----
     static constexpr int R_TX = 7;
     static constexpr int R_RX = 15;
 
+    // use Serial1 and Serial2 from Arduino core
     HardwareSerial& U_L = Serial1;
     HardwareSerial& U_R = Serial2;
 
-    // =================== Protocolo (idéntico a SPI) ===================
-    static constexpr uint8_t PROTO_VERSION_V2 = 0x02; // telemetría nueva (20B
-    static constexpr uint8_t ACT_SOF       = 0x5A;
-    static constexpr uint8_t TEL_SOF       = 0xA5;
-    static constexpr size_t  ACT_SIZE      = 16;
-    static constexpr size_t  TEL_SIZE      = 36;
-    static constexpr uint8_t TEL_LEN_FIELD = 35;
+    // protocol constants
+    static constexpr uint8_t PROTO_VERSION_V2 = 0x02;
+    static constexpr uint8_t ACT_SOF         = 0x5A;
+    static constexpr uint8_t TEL_SOF         = 0xA5;
+    static constexpr size_t  ACT_SIZE        = 16;
 
-    // SLIP
+    // SLIP constants
     static constexpr uint8_t SLIP_END     = 0xC0;
     static constexpr uint8_t SLIP_ESC     = 0xDB;
     static constexpr uint8_t SLIP_ESC_END = 0xDC;
     static constexpr uint8_t SLIP_ESC_ESC = 0xDD;
 
+    // ---- frames ----
     #pragma pack(push,1)
+    // host → module
     struct ActuationCmdV1 {
-      uint8_t  sof, version, len, seq;
-      uint8_t  mode, rsv0;
-      int16_t  tgt_q15, kp_q15, kd_q15;
-      uint16_t limits;
-      uint8_t  rsv1, crc8; // rsv1 sin uso en modo dual-bus
+        uint8_t  sof, version, len, seq;
+        uint8_t  mode, rsv0;
+        int16_t  tgt_q15, kp_q15, kd_q15;
+        uint16_t limits;
+        uint8_t  rsv1, crc8;
     };
-
+    // module → host
     struct TelemetryFrameV2 {
-      uint8_t  sof, version, len, seq;
-      uint32_t t_us;
-      uint16_t flags, sample_hz;
-      int16_t  enc_q15;
-      int16_t  ipeak_q15;
-      uint8_t  phase_peak;
-      uint16_t frame_ctr;
-      uint8_t  crc8;
+        uint8_t  sof, version, len, seq;
+        uint32_t t_us;
+        uint16_t flags, sample_hz;
+        int16_t  enc_q15;
+        int16_t  ipeak_q15;
+        uint8_t  phase_peak;
+        uint16_t frame_ctr;
+        uint8_t  crc8;
     };
     #pragma pack(pop)
 
-    static constexpr size_t TEL2_SIZE      = sizeof(TelemetryFrameV2); // 20
-    static constexpr uint8_t TEL2_LEN      = TEL2_SIZE - 1;
-        // ===== Utilitarios =====
+    static constexpr size_t  TEL2_SIZE = sizeof(TelemetryFrameV2);
+    static constexpr uint8_t TEL2_LEN  = TEL2_SIZE - 1;
+
+    // ---- protocol helpers ----
     static uint8_t crc8_sum(const uint8_t* data, size_t len, uint8_t init){
-      uint8_t crc = init;
-      for (size_t i = 0; i < len; ++i) {
-        crc ^= data[i];
-        for (uint8_t k = 0; k < 8; ++k)
-          crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
-      }
-      return crc;
+        uint8_t crc = init;
+        for (size_t i = 0; i < len; ++i) {
+            crc ^= data[i];
+            for (uint8_t k = 0; k < 8; ++k)
+                crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+        }
+        return crc;
     }
+
     static float   q15_to_rad(int16_t q){ return (float)q * 2.0f * (float)M_PI / 32768.0f; }
-    static float   q14_to_g  (int16_t q){ return (float)q / 16384.0f; }
     static int16_t vel_to_q15(float vel_rad_s){ return (int16_t)lrintf(vel_rad_s * 2048.0f); }
 
+    // build actuation frame in driver’s format
     static void buildActCmd(ActuationCmdV1& c, uint8_t seq, float v_joint_setpoint_rad_s){
-      memset(&c, 0, sizeof(c));
-      c.sof = ACT_SOF;  c.version = PROTO_VERSION_V2;  c.len = ACT_SIZE - 1;
-      c.seq = seq;
-      c.mode = 2; // VELOCITY
-      c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s);   
-      c.crc8 = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1, 0x00);
+        memset(&c, 0, sizeof(c));
+        c.sof     = ACT_SOF;
+        c.version = PROTO_VERSION_V2;
+        c.len     = ACT_SIZE - 1;
+        c.seq     = seq;
+        c.mode    = 2; // VELOCITY
+        c.tgt_q15 = vel_to_q15(v_joint_setpoint_rad_s);
+        c.crc8    = crc8_sum(reinterpret_cast<const uint8_t*>(&c), ACT_SIZE - 1, 0x00);
     }
+
+    // check incoming telemetry frame
     static bool validateTelemetryV2(const uint8_t* buf, size_t n){
-      if (n != TEL2_SIZE) return false;
-      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
-      if (f.sof != TEL_SOF) return false;
-      if (f.version != PROTO_VERSION_V2) return false;
-      if (f.len != TEL2_LEN) return false;
-      uint8_t calc = crc8_sum(buf, TEL2_SIZE - 1, 0x00);
-      return (calc == f.crc8);
+        if (n != TEL2_SIZE) return false;
+        const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+        if (f.sof     != TEL_SOF)          return false;
+        if (f.version != PROTO_VERSION_V2) return false;
+        if (f.len     != TEL2_LEN)         return false;
+        uint8_t calc  = crc8_sum(buf, TEL2_SIZE - 1, 0x00);
+        return (calc == f.crc8);
     }
-    // ==== SLIP helpers ====
+
+    // SLIP: send one byte with escaping
     static void slip_write_byte(HardwareSerial& U, uint8_t b){
-      if (b==SLIP_END){ U.write(SLIP_ESC); U.write(SLIP_ESC_END); }
-      else if (b==SLIP_ESC){ U.write(SLIP_ESC); U.write(SLIP_ESC_ESC); }
-      else U.write(b);
+        if (b == SLIP_END){ U.write(SLIP_ESC); U.write(SLIP_ESC_END); }
+        else if (b == SLIP_ESC){ U.write(SLIP_ESC); U.write(SLIP_ESC_ESC); }
+        else U.write(b);
     }
+
+    // SLIP: send full frame
     static void slip_write_frame(HardwareSerial& U, const uint8_t* data, size_t n){
-      U.write(SLIP_END);
-      for(size_t i=0;i<n;i++) slip_write_byte(U, data[i]);
-      U.write(SLIP_END);
+        U.write(SLIP_END);
+        for (size_t i=0; i<n; i++) slip_write_byte(U, data[i]);
+        U.write(SLIP_END);
     }
 
-    typedef void (*SlipFrameHandler)(uint8_t*, size_t);
-
-    static void slip_feed_byte(uint8_t b, SlipFrameHandler onFrame){
-      // Un parser por tarea RX; lo haremos miembro de un “contexto”
-      // Para permitir dos instancias, vamos a mover esto a un struct.
-    }
-
-    // ====== Contexto reutilizable por bus ======
+    // ---- per-link context (we have two links: L and R) ----
     struct LinkCtx {
-      HardwareSerial* U;
-      Aquiles::Detection::Leg leg;     // L o R
-      SemaphoreHandle_t ioMutex;
-      uint8_t seq;
+        HardwareSerial* U;                 // actual UART
+        Aquiles::Detection::Leg leg;       // leg this link controls
+        SemaphoreHandle_t        ioMutex;  // protect TX if needed
+        uint8_t                  seq;      // TX sequence
 
-      // RX state (SLIP)
-      static const size_t RX_BUF_MAX = 256;
-      uint8_t  rx_buf[RX_BUF_MAX];
-      size_t   rx_len;
-      bool     rx_in_frame;
-      bool     esc;
+        // SLIP RX state
+        static const size_t RX_BUF_MAX = 256;
+        uint8_t  rx_buf[RX_BUF_MAX];
+        size_t   rx_len;
+        bool     rx_in_frame;
+        bool     esc;
 
-      LinkCtx(): U(nullptr), leg(Aquiles::Detection::Leg::L),
-                ioMutex(nullptr), seq(0),
-                rx_len(0), rx_in_frame(false), esc(false) {}
+        LinkCtx(): U(nullptr),
+                   leg(Aquiles::Detection::Leg::L),
+                   ioMutex(nullptr),
+                   seq(0),
+                   rx_len(0),
+                   rx_in_frame(false),
+                   esc(false) {}
     };
 
-    // Dos contextos: uno por enlace
+    // one context per leg
     static LinkCtx CTX_L;
     static LinkCtx CTX_R;
 
-    static void ctx_slip_feed(LinkCtx& C, uint8_t b, SlipFrameHandler onFrame){
-      if (b == SLIP_END){
-        if (C.rx_in_frame && C.rx_len >= TEL2_SIZE){
-          if (onFrame) onFrame(C.rx_buf, C.rx_len);
-        }
-        C.rx_len = 0;
-        C.rx_in_frame = true;
-        C.esc = false;
-        return;
-      }
-      if (!C.rx_in_frame) return;
-
-      if (C.esc){
-        if (b==SLIP_ESC_END) b = SLIP_END;
-        else if (b==SLIP_ESC_ESC) b = SLIP_ESC;
-        C.esc = false;
-      } else if (b == SLIP_ESC){
-        C.esc = true;
-        return;
-      }
-
-      if (C.rx_len < LinkCtx::RX_BUF_MAX) C.rx_buf[C.rx_len++] = b;
-    }
-
-    // ===== OC hold =====
-    static constexpr uint16_t FLAG_OC = (1u<<0);
-    #include <esp_timer.h>
+    // hold-on-OC state
     static inline uint32_t now_ms(){ return (uint32_t)(esp_timer_get_time()/1000ULL); }
     static uint32_t hold_until_L_ms = 0;
     static uint32_t hold_until_R_ms = 0;
 
+    // when a valid telemetry frame comes, we ingest it into Detection
     static void ingestTelemetryV2(const TelemetryFrameV2& f, Aquiles::Detection::Leg leg){
-      Aquiles::Detection::SampleIn s{};
-      s.ts_us       = f.t_us;
-      s.theta_rad   = q15_to_rad(f.enc_q15);
-      s.accel_fwd_g = NAN;      // IMU viene por I2C
-      s.imu_sat     = false;
+        // build a detection sample from the telemetry
+        Aquiles::Detection::SampleIn s{};
+        s.ts_us       = f.t_us;
+        s.theta_rad   = q15_to_rad(f.enc_q15);
+        s.accel_fwd_g = NAN;    // IMU data comes elsewhere
+        s.imu_sat     = false;
 
-      Aquiles::Detection::pushSample(leg, s);
+        // push to detection
+        Aquiles::Detection::pushSample(leg, s);
 
-      // OC → hold y clamp de referencia
-      static constexpr uint16_t FLAG_OC = (1u<<0);
-      if (f.flags & FLAG_OC){
-        uint32_t t = now_ms();
-        if (leg==Aquiles::Detection::Leg::L) hold_until_L_ms = t + 200;
-        else                                  hold_until_R_ms = t + 200;
-        Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
-      }
+        // if OC flag is set, freeze for 200 ms and force target to current angle
+        static constexpr uint16_t FLAG_OC = (1u<<0);
+        if (f.flags & FLAG_OC){
+            uint32_t t = now_ms();
+            if (leg == Aquiles::Detection::Leg::L) hold_until_L_ms = t + 200;
+            else                                   hold_until_R_ms = t + 200;
+            Aquiles::Detection::setAngleTarget(leg, q15_to_rad(f.enc_q15));
+        }
     }
+
+    // SLIP RX byte feeding
+    static void ctx_slip_feed(LinkCtx& C, uint8_t b, void (*onFrame)(uint8_t*, size_t)){
+        // END marks the end of a frame
+        if (b == SLIP_END){
+            // we have a complete frame
+            if (C.rx_in_frame && C.rx_len >= TEL2_SIZE){
+                if (onFrame) onFrame(C.rx_buf, C.rx_len);
+            }
+            // reset state for next frame
+            C.rx_len      = 0;
+            C.rx_in_frame = true;
+            C.esc         = false;
+            return;
+        }
+        // ignore if we are not inside a frame yet
+        if (!C.rx_in_frame) return;
+
+        // handle escaped bytes
+        if (C.esc){
+            if      (b == SLIP_ESC_END) b = SLIP_END;
+            else if (b == SLIP_ESC_ESC) b = SLIP_ESC;
+            C.esc = false;
+        } else if (b == SLIP_ESC){
+            C.esc = true;
+            return;
+        }
+
+        // store byte if buffer is not full
+        if (C.rx_len < LinkCtx::RX_BUF_MAX) C.rx_buf[C.rx_len++] = b;
+    }
+
+    // frame handlers (one per leg)
     static void on_slip_frame_L(uint8_t* buf, size_t n){
-      if (!validateTelemetryV2(buf, n)) return;
-      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
-      ingestTelemetryV2(f, Aquiles::Detection::Leg::L);
+        if (!validateTelemetryV2(buf, n)) return;
+        const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+        ingestTelemetryV2(f, Aquiles::Detection::Leg::L);
     }
-
     static void on_slip_frame_R(uint8_t* buf, size_t n){
-      if (!validateTelemetryV2(buf, n)) return;
-      const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
-      ingestTelemetryV2(f, Aquiles::Detection::Leg::R);
+        if (!validateTelemetryV2(buf, n)) return;
+        const TelemetryFrameV2& f = *reinterpret_cast<const TelemetryFrameV2*>(buf);
+        ingestTelemetryV2(f, Aquiles::Detection::Leg::R);
     }
-    // ===== Tasks =====
+
+    // TX task: sends actuation frames at 1 kHz
     static void vTxTask(void* pv){
-      LinkCtx* C = static_cast<LinkCtx*>(pv);
-      TickType_t last = xTaskGetTickCount();
-      for(;;){
-        if (Aquiles::Safety::triggered()){
-          Serial.println("[UARTDual] E-STOP: deteniendo TX.");
-          vTaskDelete(nullptr);
+        LinkCtx* C = static_cast<LinkCtx*>(pv);
+        TickType_t last = xTaskGetTickCount();
+        for(;;){
+            // if E-STOP is active, stop transmitting
+            if (Aquiles::Safety::triggered()){
+                Serial.println("[UARTDual] E-STOP: stopping TX task.");
+                vTaskDelete(nullptr);
+            }
+
+            // get current command from detection for this leg
+            auto cmd = Aquiles::Detection::getCmd(C->leg);
+
+            // apply hold if there was an OC event
+            uint32_t t = now_ms();
+            using Aquiles::Detection::Leg;
+            if (C->leg == Leg::L && t < hold_until_L_ms) cmd.setpoint = 0.0f;
+            if (C->leg == Leg::R && t < hold_until_R_ms) cmd.setpoint = 0.0f;
+
+            // build the frame
+            ActuationCmdV1 c{};
+            uint8_t seq = ++C->seq;
+            buildActCmd(c, seq, cmd.setpoint);
+
+            // write with SLIP
+            if (C->ioMutex) xSemaphoreTake(C->ioMutex, portMAX_DELAY);
+            slip_write_frame(*C->U, reinterpret_cast<uint8_t*>(&c), ACT_SIZE);
+            if (C->ioMutex) xSemaphoreGive(C->ioMutex);
+
+            vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
         }
-
-        using Aquiles::Detection::Leg;
-        auto cmd = Aquiles::Detection::getCmd(C->leg);
-
-        uint32_t t = now_ms();
-        if (C->leg == Leg::L && t < hold_until_L_ms) cmd.setpoint = 0.0f;
-        if (C->leg == Leg::R && t < hold_until_R_ms) cmd.setpoint = 0.0f;
-
-        ActuationCmdV1 c{};
-        uint8_t seq = ++C->seq;
-        buildActCmd(c, seq, cmd.setpoint);
-
-        if (C->ioMutex) xSemaphoreTake(C->ioMutex, portMAX_DELAY);
-        slip_write_frame(*C->U, reinterpret_cast<uint8_t*>(&c), ACT_SIZE);
-        if (C->ioMutex) xSemaphoreGive(C->ioMutex);
-
-        vTaskDelayUntil(&last, pdMS_TO_TICKS(1)); // 1 kHz
-      }
     }
 
+    // RX task: reads bytes from UART and feeds SLIP parser
     static void vRxTask(void* pv){
-      LinkCtx* C = static_cast<LinkCtx*>(pv);
-      SlipFrameHandler cb = (C->leg == Aquiles::Detection::Leg::L) ? &on_slip_frame_L : &on_slip_frame_R;
-      for(;;){
-        while (C->U->available()){
-          uint8_t b = (uint8_t)C->U->read();
-          ctx_slip_feed(*C, b, cb);
+        LinkCtx* C = static_cast<LinkCtx*>(pv);
+        auto cb = (C->leg == Aquiles::Detection::Leg::L) ? &on_slip_frame_L : &on_slip_frame_R;
+        for(;;){
+            while (C->U->available()){
+                uint8_t b = (uint8_t)C->U->read();
+                ctx_slip_feed(*C, b, cb);
+            }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
-      }
     }
 
-    // ===== API =====
+    // public: configure both UARTs and contexts
     void init(){
-      // Contexto Left
-      CTX_L.U = &U_L;
-      CTX_L.leg = Aquiles::Detection::Leg::L;
-      if (!CTX_L.ioMutex) CTX_L.ioMutex = xSemaphoreCreateMutex();
+        // Left link context
+        CTX_L.U   = &U_L;
+        CTX_L.leg = Aquiles::Detection::Leg::L;
+        if (!CTX_L.ioMutex) CTX_L.ioMutex = xSemaphoreCreateMutex();
 
-      // Contexto Right
-      CTX_R.U = &U_R;
-      CTX_R.leg = Aquiles::Detection::Leg::R;
-      if (!CTX_R.ioMutex) CTX_R.ioMutex = xSemaphoreCreateMutex();
+        // Right link context
+        CTX_R.U   = &U_R;
+        CTX_R.leg = Aquiles::Detection::Leg::R;
+        if (!CTX_R.ioMutex) CTX_R.ioMutex = xSemaphoreCreateMutex();
 
-      // Begin UARTs
-      U_L.begin(UART_BAUD, SERIAL_8N1, L_RX, L_TX);
-      U_R.begin(UART_BAUD, SERIAL_8N1, R_RX, R_TX);
+        // start UARTs
+        U_L.begin(UART_BAUD, SERIAL_8N1, L_RX, L_TX);
+        U_R.begin(UART_BAUD, SERIAL_8N1, R_RX, R_TX);
 
-      Serial.printf("[UARTDual] L: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, L_TX, L_RX);
-      Serial.printf("[UARTDual] R: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, R_TX, R_RX);
+        Serial.printf("[UARTDual] L: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, L_TX, L_RX);
+        Serial.printf("[UARTDual] R: %u bps (TX=%d RX=%d)\n", (unsigned)UART_BAUD, R_TX, R_RX);
     }
 
+    // public: start TX/RX tasks for both links
     void startTasks(){
-      // L
-      xTaskCreatePinnedToCore(vTxTask, "UartTX_L", 4096, &CTX_L, 5, nullptr, 1);
-      xTaskCreatePinnedToCore(vRxTask, "UartRX_L", 4096, &CTX_L, 6, nullptr, 1);
-      // R
-      xTaskCreatePinnedToCore(vTxTask, "UartTX_R", 4096, &CTX_R, 5, nullptr, 1);
-      xTaskCreatePinnedToCore(vRxTask, "UartRX_R", 4096, &CTX_R, 6, nullptr, 1);
+        // Left
+        xTaskCreatePinnedToCore(vTxTask, "UartTX_L", 4096, &CTX_L, 5, nullptr, 1);
+        xTaskCreatePinnedToCore(vRxTask, "UartRX_L", 4096, &CTX_L, 6, nullptr, 1);
+        // Right
+        xTaskCreatePinnedToCore(vTxTask, "UartTX_R", 4096, &CTX_R, 5, nullptr, 1);
+        xTaskCreatePinnedToCore(vRxTask, "UartRX_R", 4096, &CTX_R, 6, nullptr, 1);
     }
 
-    } // namespace UARTDual
-    namespace Safety {
-        constexpr int PIN_ESTOP = 39;          // ajustá a tu botón
-        static volatile bool g_estop = false;
-        void IRAM_ATTR isr_estop(){ g_estop = true; }
-        void init(){
-          pinMode(PIN_ESTOP, INPUT_PULLUP);  // activo en HIGH
-          attachInterrupt(digitalPinToInterrupt(PIN_ESTOP), isr_estop, FALLING);
-        }
-        inline bool triggered(){ return g_estop; }
-        } // namespace Safety
-      // ================= BATTERY / POWER =================
-    namespace IMU {
+} // namespace UARTDual
 
+
+
+// =========================================================
+// 4. BASIC TASKS (utility / example)
+// =========================================================
+namespace Tasks {
+
+    // small init task: set up pins, then delete itself
+    void Init(void* /*params*/) {
+        pinMode(9, OUTPUT);
+        vTaskDelete(nullptr);
+    }
+
+    // blink task to confirm the system is alive
+    void Blink(void* /*params*/) {
+        for(;;){
+            digitalWrite(9, !digitalRead(9));
+            Serial.printf("Rk.Test1\r\n");
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+    }
+
+} // namespace Tasks
+
+
+
+// =========================================================
+// 5. SAFETY / E-STOP
+// =========================================================
+namespace Safety {
+
+    // choose pin according to your board
+    constexpr int PIN_ESTOP = 39;
+    // shared flag, written in ISR
+    static volatile bool g_estop = false;
+
+    // ISR: fired on button press
+    void IRAM_ATTR isr_estop(){ g_estop = true; }
+
+    // public init: sets pin mode and ISR
+    void init(){
+        pinMode(PIN_ESTOP, INPUT_PULLUP);  // active on LOW
+        attachInterrupt(digitalPinToInterrupt(PIN_ESTOP), isr_estop, FALLING);
+    }
+
+    // check if stop was hit
+    bool triggered(){ return g_estop; }
+
+} // namespace Safety
+
+
+
+// =========================================================
+// 6. IMU: periodic read of two MPU6050s
+// =========================================================
+namespace IMU {
+
+    // one IMU per leg
     static Adafruit_MPU6050 mpuL, mpuR;
+    // I2C bus used
     static TwoWire* W = &Wire;
+    // stored config
     static Cfg G{};
-    static bool hasL=false, hasR=false;
+    // whether each IMU responded
+    static bool hasL = false, hasR = false;
 
+    // helper: pick accel axis
     static float take_axis(const sensors_event_t& a, int8_t axis){
-      switch(axis){
-        case 0: return a.acceleration.x; // m/s^2
-        case 1: return a.acceleration.y;
-        case 2: return a.acceleration.z;
-        default: return 0.0f;
-      }
+        switch(axis){
+            case 0: return a.acceleration.x;
+            case 1: return a.acceleration.y;
+            case 2: return a.acceleration.z;
+        }
+        return 0.0f;
     }
+
+    // helper: pick gyro axis
     static float take_gyro(const sensors_event_t& g, int8_t axis){
-      switch(axis){
-        case 0: return g.gyro.x;  // rad/s
-        case 1: return g.gyro.y;
-        case 2: return g.gyro.z;
-        default: return 0.0f;
-      }
+        switch(axis){
+            case 0: return g.gyro.x;
+            case 1: return g.gyro.y;
+            case 2: return g.gyro.z;
+        }
+        return 0.0f;
     }
 
+    // init both IMUs on a given bus
     bool init(const Cfg& cfg, TwoWire* bus){
-      G = cfg;
-      if (bus) W = bus;
+        G = cfg;
+        if (bus) W = bus;
 
-      // Arrancar I2C (si no está ya)
-      // En ESP32 puedes especificar pines si lo necesitás: W->begin(SDApin, SCLpin, freq);
-      W->begin(8, 18, 400000); 
+        // ESP32: you can set SDA/SCL and frequency here
+        W->begin(8, 18, 400000);  // SDA=8, SCL=18, 400 kHz
 
-      // Intentar begin para ambos
-      hasL = mpuL.begin(G.addr_L, W);
-      hasR = mpuR.begin(G.addr_R, W);
+        // try to start both IMUs
+        hasL = mpuL.begin(G.addr_L, W);
+        hasR = mpuR.begin(G.addr_R, W);
 
-      if (hasL) {
-        mpuL.setAccelerometerRange(MPU6050_RANGE_4_G);
-        mpuL.setGyroRange(MPU6050_RANGE_500_DEG);
-        mpuL.setFilterBandwidth(MPU6050_BAND_44_HZ);
-      }
-      if (hasR) {
-        mpuR.setAccelerometerRange(MPU6050_RANGE_4_G);
-        mpuR.setGyroRange(MPU6050_RANGE_500_DEG);
-        mpuR.setFilterBandwidth(MPU6050_BAND_44_HZ);
-      }
+        // Configure filter/range if available
+        if (hasL) {
+            mpuL.setAccelerometerRange(MPU6050_RANGE_4_G);
+            mpuL.setGyroRange(MPU6050_RANGE_500_DEG);
+            mpuL.setFilterBandwidth(MPU6050_BAND_44_HZ);
+        }
+        if (hasR) {
+            mpuR.setAccelerometerRange(MPU6050_RANGE_4_G);
+            mpuR.setGyroRange(MPU6050_RANGE_500_DEG);
+            mpuR.setFilterBandwidth(MPU6050_BAND_44_HZ);
+        }
 
-      Serial.printf("[IMU] L addr=0x%02X %s | R addr=0x%02X %s\n",
-          G.addr_L, hasL?"OK":"FAIL", G.addr_R, hasR?"OK":"FAIL");
-      return hasL || hasR;
+        Serial.printf("[IMU] L addr=0x%02X %s | R addr=0x%02X %s\n",
+            G.addr_L, hasL?"OK":"FAIL", G.addr_R, hasR?"OK":"FAIL");
+
+        // return true if at least one IMU is present
+        return hasL || hasR;
     }
 
+    // task that periodically reads both IMUs and feeds Detection
     static void vTaskIMU(void*){
-      const TickType_t per = pdMS_TO_TICKS(G.period_ms);
-      for(;;){
-        sensors_event_t aL, gL, tL;
-        sensors_event_t aR, gR, tR;
+        const TickType_t per = pdMS_TO_TICKS(G.period_ms);
+        for(;;){
+            sensors_event_t aL, gL, tL;
+            sensors_event_t aR, gR, tR;
+            uint32_t ts = (uint32_t)micros();
 
-        uint32_t ts = (uint32_t)micros();
+            // left IMU
+            if (hasL){
+                mpuL.getEvent(&aL, &gL, &tL);
+                float a_fwd_ms2 = (float)G.fwd_sign_L * take_axis(aL, G.fwd_axis_L);
+                float a_fwd_g   = a_fwd_ms2 / 9.80665f;
 
-        if (hasL){
-          mpuL.getEvent(&aL, &gL, &tL);
-          float a_fwd_ms2 = (float)G.fwd_sign_L * take_axis(aL, G.fwd_axis_L);
-          float a_fwd_g   = a_fwd_ms2 / 9.80665f;
+                Aquiles::Detection::SampleIn s{};
+                s.ts_us       = ts;
+                s.theta_rad   = NAN;        // we don't touch angle here
+                s.accel_fwd_g = a_fwd_g;
+                s.omega_imu   = take_gyro(gL, G.fwd_axis_L);
+                // crude saturation heuristic
+                s.imu_sat     = (fabsf(a_fwd_g) > 3.0f) ||
+                                (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
+                Aquiles::Detection::pushSample(Aquiles::Detection::Leg::L, s);
+            }
 
-          Aquiles::Detection::SampleIn s{};
-          s.ts_us       = ts;
-          s.theta_rad   = NAN;          // no toco ángulo
-          s.accel_fwd_g = a_fwd_g;      // sí actualizo accel
-          // podés usar gyro si querés (omega_imu), ej: eje de flex/ext
-          s.omega_imu   = take_gyro(gL, G.fwd_axis_L);
-          // heurística saturación: |a|>3g o |gyro|>1000 dps
-          s.imu_sat     = (fabsf(a_fwd_g)>3.0f) || (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
-          Aquiles::Detection::pushSample(Aquiles::Detection::Leg::L, s);
+            // right IMU
+            if (hasR){
+                mpuR.getEvent(&aR, &gR, &tR);
+                float a_fwd_ms2 = (float)G.fwd_sign_R * take_axis(aR, G.fwd_axis_R);
+                float a_fwd_g   = a_fwd_ms2 / 9.80665f;
+
+                Aquiles::Detection::SampleIn s{};
+                s.ts_us       = ts;
+                s.theta_rad   = NAN;
+                s.accel_fwd_g = a_fwd_g;
+                s.omega_imu   = take_gyro(gR, G.fwd_axis_R);
+                s.imu_sat     = (fabsf(a_fwd_g) > 3.0f) ||
+                                (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
+                Aquiles::Detection::pushSample(Aquiles::Detection::Leg::R, s);
+            }
+
+            vTaskDelay(per);
         }
-
-        if (hasR){
-          mpuR.getEvent(&aR, &gR, &tR);
-          float a_fwd_ms2 = (float)G.fwd_sign_R * take_axis(aR, G.fwd_axis_R);
-          float a_fwd_g   = a_fwd_ms2 / 9.80665f;
-
-          Aquiles::Detection::SampleIn s{};
-          s.ts_us       = ts;
-          s.theta_rad   = NAN;
-          s.accel_fwd_g = a_fwd_g;
-          s.omega_imu   = take_gyro(gR, G.fwd_axis_R);
-          s.imu_sat     = (fabsf(a_fwd_g)>3.0f) || (fabsf(s.omega_imu) > (1000.0f*(float)M_PI/180.0f));
-          Aquiles::Detection::pushSample(Aquiles::Detection::Leg::R, s);
-        }
-
-        vTaskDelay(per);
-      }
     }
 
     void startTask(){
-      xTaskCreatePinnedToCore(vTaskIMU, "IMU", 4096, nullptr, 3, nullptr, 0);
+        xTaskCreatePinnedToCore(vTaskIMU, "IMU", 4096, nullptr, 3, nullptr, 0);
     }
 
-    } // namespace IMU
-    namespace Power {
+} // namespace IMU
 
-      // ---- PINS (ajustá a tu placa) ----
-      static constexpr int ADC_C1_PIN = 1;   // tap celda 1 (V_C1)
-      static constexpr int ADC_C2_PIN = 2;   // tap celda 2 (V_C2)
-      static constexpr int ADC_C3_PIN = 3;   // tap celda 3 (V_C3)
-      static constexpr int ADC_C4_PIN = 4;   // tap celda 4 (V_C4)
 
-      // ---- ADC params ----
-      static constexpr float VREF   = 3.300f;   // referencia ADC efectiva (calibrar)
-      static constexpr int   ADC_MAX= 4095;     // 12 bits
 
-      // ---- Divisores (tu esquema) ----
-      // Vtap = Vadc * (Rtop+Rbot)/Rbot
-      static constexpr float Rbot[4] = {2200.0f, 2200.0f, 2200.0f, 2200.0f};
-      static constexpr float Rtop[4] = {1200.0f, 4300.0f, 8200.0f,12000.0f};
+// =========================================================
+// 7. POWER / BATTERY MONITOR
+// =========================================================
+namespace Power {
 
-      // ---- Calibración por tap (ganancia/offset) ----
-      struct Cal { float gain; float offs; };
-      static Cal CAL[4] = {
-        {1.000f, 0.000f}, {1.000f, 0.000f}, {1.000f, 0.000f}, {1.000f, 0.000f}
-      };
+    // ADC pins for each tap (adjust to your board)
+    static constexpr int ADC_C1_PIN = 1;
+    static constexpr int ADC_C2_PIN = 2;
+    static constexpr int ADC_C3_PIN = 3;
+    static constexpr int ADC_C4_PIN = 4;
 
-      // ---- Estado filtrado ----
-      static float tap_V[4]  = {0,0,0,0};   // V en cada tap (total hasta la celda N)
-      static float cell_V[4] = {0,0,0,0};   // V por celda (C1..C4)
-      static SemaphoreHandle_t mtx = nullptr;
+    // ADC params
+    static constexpr float VREF    = 3.300f;
+    static constexpr int   ADC_MAX = 4095;   // 12bit
 
-      // ---- Filtro / periodo ----
-      static constexpr float     EMA_A   = 0.30f;                 // alisado
-      static constexpr TickType_t PERIOD = pdMS_TO_TICKS(200);    // 5 Hz
+    // Voltage dividers (top and bottom resistors)
+    static constexpr float Rbot[4] = {2200.0f, 2200.0f, 2200.0f, 2200.0f};
+    static constexpr float Rtop[4] = {1200.0f, 4300.0f, 8200.0f, 12000.0f};
 
-      // ===== Helpers =====
-      static inline float ema(float x, float y, float a){ return a*x + (1.0f-a)*y; }
+    // Per-tap calibration (gain/offset)
+    struct Cal { float gain; float offs; };
+    static Cal CAL[4] = {
+        {1.000f, 0.000f},
+        {1.000f, 0.000f},
+        {1.000f, 0.000f},
+        {1.000f, 0.000f}
+    };
 
-      static float readTapVolt_raw(int pin, int idx){
+    // Filtered state
+    static float tap_V[4]  = {0,0,0,0};   // tap voltages (cumulative)
+    static float cell_V[4] = {0,0,0,0};   // individual cell voltages
+    static SemaphoreHandle_t mtx = nullptr;
+
+    // Filter and period
+    static constexpr float     EMA_A   = 0.30f;              // smoothing factor
+    static constexpr TickType_t PERIOD = pdMS_TO_TICKS(200); // 5 Hz
+
+    static inline float ema(float x, float y, float a){ return a*x + (1.0f-a)*y; }
+
+    // read and convert one tap to actual volts (with divider and calibration)
+    static float readTapVolt_raw(int pin, int idx){
         uint16_t adc = analogRead(pin);
-        float vadc = (adc * VREF) / ADC_MAX;                      // V en pin MCU
-        float vtap = vadc * (Rtop[idx] + Rbot[idx]) / Rbot[idx];  // V reales en el tap
-        return CAL[idx].gain * vtap + CAL[idx].offs;              // calibrado
-      }
+        float vadc = (adc * VREF) / ADC_MAX;                      // MCU pin voltage
+        float vtap = vadc * (Rtop[idx] + Rbot[idx]) / Rbot[idx];  // actual tap voltage
+        return CAL[idx].gain * vtap + CAL[idx].offs;              // apply calibration
+    }
 
-      static void compute_cells_from_taps(){
-        // c1 = tap1; c2 = tap2 - tap1; c3 = tap3 - tap2; c4 = tap4 - tap3
+    // from taps (cumulative) compute each cell
+    static void compute_cells_from_taps(){
         cell_V[0] = tap_V[0];
         cell_V[1] = tap_V[1] - tap_V[0];
         cell_V[2] = tap_V[2] - tap_V[1];
         cell_V[3] = tap_V[3] - tap_V[2];
-        // clamp anti-ruido
+        // basic noise clamp
         for (int i=0;i<4;i++) if (cell_V[i] < 0.0f) cell_V[i] = 0.0f;
-      }
+    }
 
-      // ===== Tarea de muestreo/filtrado =====
-      static void vTaskMon(void*){
+    // task that keeps reading the battery taps and updating filtered values
+    static void vTaskMon(void*){
         for(;;){
-          float t1 = readTapVolt_raw(ADC_C1_PIN,0);
-          float t2 = readTapVolt_raw(ADC_C2_PIN,1);
-          float t3 = readTapVolt_raw(ADC_C3_PIN,2);
-          float t4 = readTapVolt_raw(ADC_C4_PIN,3);
+            float t1 = readTapVolt_raw(ADC_C1_PIN,0);
+            float t2 = readTapVolt_raw(ADC_C2_PIN,1);
+            float t3 = readTapVolt_raw(ADC_C3_PIN,2);
+            float t4 = readTapVolt_raw(ADC_C4_PIN,3);
 
-          if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
-          tap_V[0] = ema(t1, tap_V[0], EMA_A);
-          tap_V[1] = ema(t2, tap_V[1], EMA_A);
-          tap_V[2] = ema(t3, tap_V[2], EMA_A);
-          tap_V[3] = ema(t4, tap_V[3], EMA_A);
+            if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+            tap_V[0] = ema(t1, tap_V[0], EMA_A);
+            tap_V[1] = ema(t2, tap_V[1], EMA_A);
+            tap_V[2] = ema(t3, tap_V[2], EMA_A);
+            tap_V[3] = ema(t4, tap_V[3], EMA_A);
 
-          compute_cells_from_taps();
-          if (mtx) xSemaphoreGive(mtx);
+            compute_cells_from_taps();
+            if (mtx) xSemaphoreGive(mtx);
 
-          vTaskDelay(PERIOD);
+            vTaskDelay(PERIOD);
         }
-      }
+    }
 
-      // ===== API =====
-      void init(){
+    // public: start battery monitor
+    void init(){
         analogReadResolution(12);
-        // (opcional) analogSetAttenuation(ADC_11db);
         if (!mtx) mtx = xSemaphoreCreateMutex();
         xTaskCreatePinnedToCore(vTaskMon, "BattMon", 3072, nullptr, 2, nullptr, 0);
-        Serial.println("[Power] Monitor de celdas iniciado.");
-      }
+        Serial.println("[Power] Cell monitor started.");
+    }
 
-      // Ajuste de calibración (ganancia/offset por tap)
-      void setCal(uint8_t tapIdx, float gain, float offs){
-        if (tapIdx<4) { CAL[tapIdx].gain = gain; CAL[tapIdx].offs = offs; }
-      }
+    // public: fine-tune calibration
+    void setCal(uint8_t tapIdx, float gain, float offs){
+        if (tapIdx < 4) { CAL[tapIdx].gain = gain; CAL[tapIdx].offs = offs; }
+    }
 
-      // Getters thread-safe (Voltios)
-      float getCellV(uint8_t i){
+    // public: get individual cell voltage in volts
+    float getCellV(uint8_t i){
         float v=0;
-        if (i<4){ if(mtx) xSemaphoreTake(mtx,portMAX_DELAY); v=cell_V[i]; if(mtx) xSemaphoreGive(mtx); }
-        return v;
-      }
-
-      // Helper para telemetría: devuelve mV enteros (C1..C4)
-      void fillCellMilliVolts(uint16_t out_mV[4]){
-        if(mtx) xSemaphoreTake(mtx,portMAX_DELAY);
-        for (int i=0;i<4;i++){
-          float mv = cell_V[i]*1000.0f;
-          if (mv < 0) mv = 0;
-          if (mv > 65535) mv = 65535; // saturación por seguridad
-          out_mV[i] = static_cast<uint16_t>(mv + 0.5f);
+        if (i<4){
+            if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+            v = cell_V[i];
+            if (mtx) xSemaphoreGive(mtx);
         }
-        if(mtx) xSemaphoreGive(mtx);
-      }
+        return v;
+    }
 
-    } // namespace Power como uso esto
+    // public: pack SOC estimate (simple linear example)
+    float getPackSOC(){
+        // take full pack voltage (tap 4)
+        if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+        float vpack = tap_V[3];
+        if (mtx) xSemaphoreGive(mtx);
+
+        // map 12.0..16.8 → 0..1 (for 4S Li-ion example)
+        float soc = (vpack - 12.0f) / (16.8f - 12.0f);
+        if (soc < 0) soc = 0;
+        if (soc > 1) soc = 1;
+        return soc;
+    }
+
+    // public: SOC based on the weakest cell
+    float getPackSOCmin(){
+        float minv = 10.0f;
+        if (mtx) xSemaphoreTake(mtx, portMAX_DELAY);
+        for (int i=0;i<4;i++){
+            if (cell_V[i] < minv) minv = cell_V[i];
+        }
+        if (mtx) xSemaphoreGive(mtx);
+
+        // map 3.0..4.2 → 0..1
+        float soc = (minv - 3.0f) / (4.2f - 3.0f);
+        if (soc < 0) soc = 0;
+        if (soc > 1) soc = 1;
+        return soc;
+    }
+
+} // namespace Power
+
 } // namespace Aquiles
