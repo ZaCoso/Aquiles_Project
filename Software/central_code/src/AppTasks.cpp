@@ -292,8 +292,10 @@ namespace BLE {
     BLECharacteristic* chENC_L = nullptr;
     BLECharacteristic* chENC_R = nullptr;
     BLECharacteristic* chF_3   = nullptr;
+    BLECharacteristic* chCMD   = nullptr;
 
     volatile bool deviceConnected = false;
+    volatile bool streamEnabled   = false;
     std::string   lastValue = "0";
 
     // Buzzer pin (active buzzer on GPIO 11)
@@ -316,28 +318,100 @@ namespace BLE {
     struct THREEF { float a, b, c; };
     #pragma pack(pop)
 
-    // called when phone writes to a characteristic
-    void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
-        std::string value = std::string(pCharacteristic->getValue().c_str());
-        if (!value.empty()) {
-            Serial.print("BLE RX: ");
-            Serial.println(value.c_str());
-            lastValue = value;
+    // simple settings (mirrors mock sketch keys)
+    struct Settings { uint8_t AID=50, RES=50, SEN=50; } settings;
 
-            // Process commands
-            if (value == "log_on" || value == "LOG_ON") {
-                Aquiles::Detection::enableLogging(true);
-            } else if (value == "log_off" || value == "LOG_OFF") {
-                Aquiles::Detection::enableLogging(false);
-            } else if (value == "log_toggle" || value == "LOG_TOGGLE") {
-                Aquiles::Detection::enableLogging(!Aquiles::Detection::isLoggingEnabled());
-            }
+    // called when phone writes to the command characteristic
+    void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
+        std::string s = std::string(pCharacteristic->getValue().c_str());
+        // log raw
+        if (!s.empty()) {
+            Serial.print("[BLE CMD RAW] ");
+            Serial.println(s.c_str());
+            lastValue = s;
         }
 
-        // Trigger buzzer for 1 second (non-blocking)
+        // beep non-blocking
         if (!g_buzzing){
             g_buzzing = true;
             xTaskCreatePinnedToCore(vBuzzerBeep1s, "Buzz1s", 1024, nullptr, 1, nullptr, 0);
+        }
+
+        // trim spaces
+        auto trim = [](std::string& x){
+            size_t a = x.find_first_not_of(" \t\r\n");
+            size_t b = x.find_last_not_of(" \t\r\n");
+            if (a==std::string::npos){ x.clear(); return; }
+            x = x.substr(a, b-a+1);
+        };
+        trim(s);
+        if (s.empty()) return;
+
+        // handle ON/OFF
+        auto upper = [](std::string x){ for(char& c:x) c = (char)toupper((unsigned char)c); return x; };
+        std::string sup = upper(s);
+        if (sup=="1" || sup=="ON"){
+            streamEnabled = true;
+            Serial.println("[ACTION] Streaming ENABLED");
+            return;
+        }
+        if (sup=="OFF"){
+            streamEnabled = false;
+            Serial.println("[ACTION] Streaming DISABLED");
+            return;
+        }
+
+        // parse KEY:VALUE
+        size_t colon = s.find(':');
+        if (colon != std::string::npos && colon>0){
+            std::string key = s.substr(0, colon);
+            std::string val = s.substr(colon+1);
+            trim(key); trim(val);
+            key = upper(key);
+
+            auto toInt = [](const std::string& v){
+                return atoi(v.c_str());
+            };
+            auto clamp0100 = [](int v){ return v<0?0:(v>100?100:v); };
+
+            if (key=="AID"){
+                settings.AID = (uint8_t)clamp0100(toInt(val));
+                Serial.printf("[CMD] AID = %u (Assistance)\n", settings.AID);
+                return;
+            } else if (key=="RES"){
+                settings.RES = (uint8_t)clamp0100(toInt(val));
+                Serial.printf("[CMD] RES = %u (Responsiveness)\n", settings.RES);
+                return;
+            } else if (key=="SEN"){
+                settings.SEN = (uint8_t)clamp0100(toInt(val));
+                Serial.printf("[CMD] SEN = %u (Sensitivity)\n", settings.SEN);
+                return;
+            } else if (key=="SPD"){
+                Serial.printf("[CMD] SPD = %s (Mock speed)\n", val.c_str());
+                return;
+            } else if (key=="MODE"){
+                Serial.printf("[CMD] MODE = %s (Mock mode)\n", val.c_str());
+                return;
+            } else if (key=="CAL"){
+                Serial.println("[CMD] CAL request (Mock calibration)");
+                return;
+            } else if (key=="BAT"){
+                Serial.println("[CMD] BAT request (Mock battery)");
+                return;
+            } else if (key=="STA"){
+                Serial.println("[CMD] STA request (Mock status)");
+                return;
+            } else {
+                Serial.printf("[CMD] Unknown key '%s' with value '%s'\n", key.c_str(), val.c_str());
+                return;
+            }
+        }
+
+        // single-token commands (CAL/BAT/STA)
+        if (sup=="CAL" || sup=="BAT" || sup=="STA"){
+            Serial.printf("[CMD] %s (mock single-word)\n", sup.c_str());
+        } else {
+            Serial.printf("[CMD] Unrecognized single token: '%s'\n", s.c_str());
         }
     }
 
@@ -372,7 +446,7 @@ namespace BLE {
         BLEDevice::setMTU(185);                // allow big-ish payloads
         const TickType_t period = pdMS_TO_TICKS(50);
         for(;;){
-            if (deviceConnected) {
+            if (deviceConnected && streamEnabled) {
                 // pull signals from detection
                 const auto& SL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
                 const auto& SR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
@@ -442,8 +516,9 @@ namespace BLE {
         chIMU_R = mkChr(pService, CHR_IMU_R_UUID);
         chENC_L = mkChr(pService, CHR_ENC_L_UUID);
         chENC_R = mkChr(pService, CHR_ENC_R_UUID);
-        // Make this one writable for simple commands from the phone
-        chF_3   = mkChr(pService, CHR_F_3_UUID, true, new MyCallbacks());
+        chF_3   = mkChr(pService, CHR_F_3_UUID);
+        // Dedicated command characteristic (write-only)
+        chCMD   = mkChr(pService, CHR_CMD_UUID, true, new MyCallbacks());
 
         // set initial values (zeros)
         {
