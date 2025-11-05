@@ -296,7 +296,7 @@ namespace BLE {
 
     volatile bool deviceConnected = false;
     volatile bool streamEnabled   = false;
-    static   volatile bool mockEnabled     = false;   // demo mode for BLE without real data
+    static   volatile bool mockEnabled     = true;   // demo mode for BLE without real data
     std::string   lastValue = "0";
 
     // Buzzer pin (active buzzer on GPIO 11)
@@ -906,7 +906,6 @@ namespace Tasks {
     void Blink(void* /*params*/) {
         for(;;){
             digitalWrite(9, !digitalRead(9));
-            Serial.printf("Rk.Test1\r\n");
             vTaskDelay(pdMS_TO_TICKS(500));
         }
     }
