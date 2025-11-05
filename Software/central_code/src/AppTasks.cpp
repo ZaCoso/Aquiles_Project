@@ -296,6 +296,19 @@ namespace BLE {
     volatile bool deviceConnected = false;
     std::string   lastValue = "0";
 
+    // Buzzer pin (active buzzer on GPIO 11)
+    static constexpr int PIN_BUZZER = 11;
+    static volatile bool g_buzzing = false;
+
+    // Small one-shot task to beep for 1 second without blocking BLE callback
+    static void vBuzzerBeep1s(void*){
+        digitalWrite(PIN_BUZZER, HIGH);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        digitalWrite(PIN_BUZZER, LOW);
+        g_buzzing = false;
+        vTaskDelete(nullptr);
+    }
+
     // Optional compact payloads (not used in string example)
     #pragma pack(push,1)
     struct IMU6F  { float ax, ay, az, gx, gy, gz; };
@@ -319,6 +332,12 @@ namespace BLE {
             } else if (value == "log_toggle" || value == "LOG_TOGGLE") {
                 Aquiles::Detection::enableLogging(!Aquiles::Detection::isLoggingEnabled());
             }
+        }
+
+        // Trigger buzzer for 1 second (non-blocking)
+        if (!g_buzzing){
+            g_buzzing = true;
+            xTaskCreatePinnedToCore(vBuzzerBeep1s, "Buzz1s", 1024, nullptr, 1, nullptr, 0);
         }
     }
 
@@ -423,7 +442,8 @@ namespace BLE {
         chIMU_R = mkChr(pService, CHR_IMU_R_UUID);
         chENC_L = mkChr(pService, CHR_ENC_L_UUID);
         chENC_R = mkChr(pService, CHR_ENC_R_UUID);
-        chF_3   = mkChr(pService, CHR_F_3_UUID);
+        // Make this one writable for simple commands from the phone
+        chF_3   = mkChr(pService, CHR_F_3_UUID, true, new MyCallbacks());
 
         // set initial values (zeros)
         {
@@ -434,6 +454,10 @@ namespace BLE {
             if (chENC_R) chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
             if (chF_3)   chF_3  ->setValue((uint8_t*)&z3, sizeof(z3));
         }
+
+        // configure buzzer pin
+        pinMode(PIN_BUZZER, OUTPUT);
+        digitalWrite(PIN_BUZZER, LOW);
 
         // start service & advertising
         pService->start();
