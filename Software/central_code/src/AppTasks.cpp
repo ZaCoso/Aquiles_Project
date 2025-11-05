@@ -451,47 +451,42 @@ namespace BLE {
                 const auto& SL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
                 const auto& SR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
 
-                // encoder left
+                // encoder left (binary float)
                 if (chENC_L) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "EncL: %.2f rad", SL.theta);
-                    chENC_L->setValue(msg);
+                    ONEF f{ SL.theta };
+                    chENC_L->setValue((uint8_t*)&f, sizeof(f));
                     chENC_L->notify();
                 }
 
-                // encoder right
+                // encoder right (binary float)
                 if (chENC_R) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "EncR: %.2f rad", SR.theta);
-                    chENC_R->setValue(msg);
+                    ONEF f{ SR.theta };
+                    chENC_R->setValue((uint8_t*)&f, sizeof(f));
                     chENC_R->notify();
                 }
 
-                // IMU left (forward accel + omega)
+                // IMU left (6 floats). Populate available fields; rest zero
                 if (chIMU_L) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "IMUL: a=%.2fg w=%.2f", SL.a_fwd_g, SL.omega);
-                    chIMU_L->setValue(msg);
+                    IMU6F f{};
+                    f.ax = SL.a_fwd_g;   // use g-units for now
+                    f.gx = SL.omega;     // rad/s from detection
+                    chIMU_L->setValue((uint8_t*)&f, sizeof(f));
                     chIMU_L->notify();
                 }
 
-                // IMU right
+                // IMU right (6 floats)
                 if (chIMU_R) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "IMUR: a=%.2fg w=%.2f", SR.a_fwd_g, SR.omega);
-                    chIMU_R->setValue(msg);
+                    IMU6F f{};
+                    f.ax = SR.a_fwd_g;
+                    f.gx = SR.omega;
+                    chIMU_R->setValue((uint8_t*)&f, sizeof(f));
                     chIMU_R->notify();
                 }
 
-                // cell voltages
+                // Compact status / forces (3 floats). Keep battery-style for now
                 if (chF_3) {
-                    char msg[64];
-                    float c1 = Power::getCellV(0);
-                    float c2 = Power::getCellV(1);
-                    float c3 = Power::getCellV(2);
-                    float c4 = Power::getCellV(3);
-                    snprintf(msg, sizeof(msg), "C1=%.3fV C2=%.3fV C3=%.3fV C4=%.3fV\n", c1,c2,c3,c4);
-                    chF_3->setValue(msg);
+                    THREEF f3{ Power::getPackSOC(), Power::getPackSOCmin(), 1.0f };
+                    chF_3->setValue((uint8_t*)&f3, sizeof(f3));
                     chF_3->notify();
                 }
             }
