@@ -296,6 +296,7 @@ namespace BLE {
 
     volatile bool deviceConnected = false;
     volatile bool streamEnabled   = false;
+    static   volatile bool mockEnabled     = false;   // demo mode for BLE without real data
     std::string   lastValue = "0";
 
     // Buzzer pin (active buzzer on GPIO 11)
@@ -401,6 +402,12 @@ namespace BLE {
             } else if (key=="STA"){
                 Serial.println("[CMD] STA request (Mock status)");
                 return;
+            } else if (key=="DEMO" || key=="MOCK"){
+                std::string vup = upper(val);
+                if (vup=="ON" || vup=="1") { mockEnabled = true;  Serial.println("[ACTION] DEMO MODE ON"); }
+                else if (vup=="OFF" || vup=="0") { mockEnabled = false; Serial.println("[ACTION] DEMO MODE OFF"); }
+                else { Serial.printf("[CMD] DEMO expects ON/OFF, got '%s'\n", val.c_str()); }
+                return;
             } else {
                 Serial.printf("[CMD] Unknown key '%s' with value '%s'\n", key.c_str(), val.c_str());
                 return;
@@ -410,6 +417,9 @@ namespace BLE {
         // single-token commands (CAL/BAT/STA)
         if (sup=="CAL" || sup=="BAT" || sup=="STA"){
             Serial.printf("[CMD] %s (mock single-word)\n", sup.c_str());
+        } else if (sup=="DEMO" || sup=="MOCK"){
+            mockEnabled = !mockEnabled;
+            Serial.printf("[ACTION] DEMO toggled %s\n", mockEnabled?"ON":"OFF");
         } else {
             Serial.printf("[CMD] Unrecognized single token: '%s'\n", s.c_str());
         }
@@ -445,6 +455,7 @@ namespace BLE {
     void TaskNotify(void*) {
         BLEDevice::setMTU(185);                // allow big-ish payloads
         const TickType_t period = pdMS_TO_TICKS(50);
+        static float tphase = 0.0f;            // used in mock mode
         for(;;){
             if (deviceConnected && streamEnabled) {
                 // pull signals from detection
@@ -453,14 +464,16 @@ namespace BLE {
 
                 // encoder left (binary float)
                 if (chENC_L) {
-                    ONEF f{ SL.theta };
+                    float th = mockEnabled ? (45.0f * (float)M_PI/180.0f + 40.0f * (float)M_PI/180.0f * sinf(tphase + 0.2f)) : SL.theta;
+                    ONEF f{ th };
                     chENC_L->setValue((uint8_t*)&f, sizeof(f));
                     chENC_L->notify();
                 }
 
                 // encoder right (binary float)
                 if (chENC_R) {
-                    ONEF f{ SR.theta };
+                    float th = mockEnabled ? (45.0f * (float)M_PI/180.0f + 40.0f * (float)M_PI/180.0f * sinf(tphase + 1.3f)) : SR.theta;
+                    ONEF f{ th };
                     chENC_R->setValue((uint8_t*)&f, sizeof(f));
                     chENC_R->notify();
                 }
@@ -468,8 +481,17 @@ namespace BLE {
                 // IMU left (6 floats). Populate available fields; rest zero
                 if (chIMU_L) {
                     IMU6F f{};
-                    f.ax = SL.a_fwd_g;   // use g-units for now
-                    f.gx = SL.omega;     // rad/s from detection
+                    if (mockEnabled){
+                        f.ax = 0.1f * sinf(tphase + 0.0f);
+                        f.ay = 0.2f * cosf(tphase * 0.8f + 0.0f);
+                        f.az = 1.00f + 0.02f * sinf(tphase * 0.4f + 0.0f);
+                        f.gx = 10.0f * sinf(tphase * 1.5f + 0.0f);
+                        f.gy = 12.0f * cosf(tphase * 1.2f + 0.0f);
+                        f.gz =  8.0f * sinf(tphase * 0.9f + 0.0f);
+                    } else {
+                        f.ax = SL.a_fwd_g;   // use g-units for now
+                        f.gx = SL.omega;     // rad/s from detection
+                    }
                     chIMU_L->setValue((uint8_t*)&f, sizeof(f));
                     chIMU_L->notify();
                 }
@@ -477,18 +499,38 @@ namespace BLE {
                 // IMU right (6 floats)
                 if (chIMU_R) {
                     IMU6F f{};
-                    f.ax = SR.a_fwd_g;
-                    f.gx = SR.omega;
+                    if (mockEnabled){
+                        f.ax = 0.1f * sinf(tphase + 1.1f);
+                        f.ay = 0.2f * cosf(tphase * 0.8f + 1.1f);
+                        f.az = 1.00f + 0.02f * sinf(tphase * 0.4f + 1.1f);
+                        f.gx = 10.0f * sinf(tphase * 1.5f + 1.1f);
+                        f.gy = 12.0f * cosf(tphase * 1.2f + 1.1f);
+                        f.gz =  8.0f * sinf(tphase * 0.9f + 1.1f);
+                    } else {
+                        f.ax = SR.a_fwd_g;
+                        f.gx = SR.omega;
+                    }
                     chIMU_R->setValue((uint8_t*)&f, sizeof(f));
                     chIMU_R->notify();
                 }
 
                 // Compact status / forces (3 floats). Keep battery-style for now
                 if (chF_3) {
-                    THREEF f3{ Power::getPackSOC(), Power::getPackSOCmin(), 1.0f };
+                    THREEF f3{};
+                    if (mockEnabled){
+                        f3.a =  5.0f + 2.5f * sinf(tphase * 0.7f);
+                        f3.b = -1.5f + 2.0f * cosf(tphase * 0.6f);
+                        f3.c = 12.0f + 3.0f * sinf(tphase * 0.5f);
+                    } else {
+                        f3.a = Power::getPackSOC();
+                        f3.b = Power::getPackSOCmin();
+                        f3.c = 1.0f;
+                    }
                     chF_3->setValue((uint8_t*)&f3, sizeof(f3));
                     chF_3->notify();
                 }
+                // advance phase for mock
+                tphase += 0.02f;
             }
             vTaskDelay(period);
         }
