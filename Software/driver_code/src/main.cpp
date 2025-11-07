@@ -81,26 +81,24 @@ namespace MotorCtrl {
     return (v < lo) ? lo : (v > hi) ? hi : v;
   }
 
-  inline float q15_to_unit(int16_t q15) {
-    // converts -32768..32767 to approx -1..+1
-    return (float)q15 / 32768.0f;
+  constexpr float CMD_Q15_PER_RAD_S = 2048.0f;
+
+  inline float q15_to_output_vel(int16_t q15) {
+    // matches central buildActCmd() which encodes rad/s * 2048
+    return (float)q15 / CMD_Q15_PER_RAD_S;
   }
 
   // Convert an actuation command (Q15) to motor rad/s
   // T is the command struct type, we only need tgt_q15
   template<typename CmdT>
   float compute_motor_vel_from_cmd(const CmdT& cmd) {
-    float unit = q15_to_unit(cmd.tgt_q15);  // normalized −1..+1
     float vel_motor = 0.0f;
+    float vel_out = q15_to_output_vel(cmd.tgt_q15);
 
     if (COMMAND_IS_OUTPUT_SIDE) {
-      // Master sends "I want this speed at the gearbox OUTPUT"
-      // We must convert to motor speed by multiplying by gear ratio
-      float vel_out = unit * (MAX_VEL_RAD_S_MOTOR / GEAR_RATIO);
       vel_motor = vel_out * GEAR_RATIO;
     } else {
-      // Master already sends motor speed in normalized form
-      vel_motor = unit * MAX_VEL_RAD_S_MOTOR;
+      vel_motor = vel_out;
     }
 
     // remove tiny values so the motor doesn't vibrate
@@ -442,7 +440,7 @@ namespace DriverUART {
     f.len        = TEL2_LEN;
     f.seq        = g_seq;
     f.t_us       = micros32();
-    f.flags      = 0; // could be: s.overcurrent ? FLAG_OC : 0;
+    f.flags      = s.overcurrent ? FLAG_OC : 0;
     f.sample_hz  = 1000; // telemetry rate in Hz
     f.enc_q15    = rad_to_q15(s.enc_rad);
     f.ipeak_q15  = 0; // not used
