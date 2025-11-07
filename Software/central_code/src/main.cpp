@@ -79,6 +79,27 @@ void setup() {
 }
 
 void loop() {
+    // Process Serial commands for logging control
+    if (Serial.available() > 0) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        cmd.toUpperCase();
+
+        if (cmd == "LOG_ON" || cmd == "LOGON") {
+            Aquiles::Detection::enableLogging(true);
+        } else if (cmd == "LOG_OFF" || cmd == "LOGOFF") {
+            Aquiles::Detection::enableLogging(false);
+        } else if (cmd == "LOG_TOGGLE" || cmd == "LOG") {
+            Aquiles::Detection::enableLogging(!Aquiles::Detection::isLoggingEnabled());
+        } else if (cmd == "LOG_STATUS" || cmd == "LOG?") {
+            Serial.printf("Detection logging: %s\n", 
+                Aquiles::Detection::isLoggingEnabled() ? "ENABLED" : "DISABLED");
+        } else if (cmd.length() > 0) {
+            Serial.printf("Unknown command: %s\n", cmd.c_str());
+            Serial.println("Available commands: LOG_ON, LOG_OFF, LOG_TOGGLE, LOG_STATUS");
+        }
+    }
+
     // Everything runs in FreeRTOS tasks, so main loop can just sleep.
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(100));
 }

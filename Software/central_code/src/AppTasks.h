@@ -142,6 +142,10 @@ namespace Aquiles {
 
         void  setAngleTarget(Leg leg, float theta_ref_rad);
         float getAngleTarget(Leg leg);
+
+        // Logging control
+        void  enableLogging(bool enable = true);
+        bool  isLoggingEnabled();
     } // namespace Detection
 
     // =========================================================

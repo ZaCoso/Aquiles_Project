@@ -33,6 +33,9 @@ namespace Detection {
     static float theta_ref_L = 0.0f;
     static float theta_ref_R = 0.0f;
 
+    // logging control
+    static volatile bool logging_enabled = false;
+
     // ----- Small helpers -----
     static inline uint32_t micros32() { return (uint32_t)micros(); }
 
@@ -202,9 +205,27 @@ namespace Detection {
     static void taskLogger(void*){
         TickType_t last = xTaskGetTickCount();
         for(;;){
-            // Uncomment for debugging
-            // Serial.printf("L th=%.2f w=%.2f | R th=%.2f w=%.2f | spL=%.2f spR=%.2f\n",
-            //   SIG_L.theta, SIG_L.omega, SIG_R.theta, SIG_R.omega, CMD_L.setpoint, CMD_R.setpoint);
+            if (logging_enabled) {
+                // Intention detection results
+                IntentOut IL = detectIntent(SIG_L, SIG_R, CFG.intent, contra_hint_L);
+                IntentOut IR = detectIntent(SIG_R, SIG_L, CFG.intent, contra_hint_R);
+
+                // Log detection inputs and results
+                Serial.printf("[DET] L: th=%.3f w=%.3f a=%.3fg | R: th=%.3f w=%.3f a=%.3fg\n",
+                    SIG_L.theta, SIG_L.omega, SIG_L.a_fwd_g,
+                    SIG_R.theta, SIG_R.omega, SIG_R.a_fwd_g);
+
+                // Log intention detection results
+                Serial.printf("[INT] L: enable=%d phase=%s | R: enable=%d phase=%s\n",
+                    IL.enable ? 1 : 0, (IL.phase == Phase::SWING) ? "SWING" : "STANCE",
+                    IR.enable ? 1 : 0, (IR.phase == Phase::SWING) ? "SWING" : "STANCE");
+
+                // Log command outputs
+                Serial.printf("[CMD] L: mode=%d sp=%.3f | R: mode=%d sp=%.3f | ref_L=%.3f ref_R=%.3f\n",
+                    (int)CMD_L.mode, CMD_L.setpoint,
+                    (int)CMD_R.mode, CMD_R.setpoint,
+                    theta_ref_L, theta_ref_R);
+            }
             vTaskDelayUntil(&last, pdMS_TO_TICKS(CFG.timing.logger_period_ms));
         }
     }
@@ -246,6 +267,16 @@ namespace Detection {
         else                        contra_hint_R = contralateral_is_in_stance;
     }
 
+    // Logging control
+    void enableLogging(bool enable){
+        logging_enabled = enable;
+        Serial.printf("[Detection] Logging %s\n", enable ? "ENABLED" : "DISABLED");
+    }
+
+    bool isLoggingEnabled(){
+        return logging_enabled;
+    }
+
 } // namespace Detection
 
 
@@ -279,6 +310,15 @@ namespace BLE {
             Serial.print("BLE RX: ");
             Serial.println(value.c_str());
             lastValue = value;
+
+            // Process commands
+            if (value == "log_on" || value == "LOG_ON") {
+                Aquiles::Detection::enableLogging(true);
+            } else if (value == "log_off" || value == "LOG_OFF") {
+                Aquiles::Detection::enableLogging(false);
+            } else if (value == "log_toggle" || value == "LOG_TOGGLE") {
+                Aquiles::Detection::enableLogging(!Aquiles::Detection::isLoggingEnabled());
+            }
         }
     }
 
