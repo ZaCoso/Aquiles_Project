@@ -248,6 +248,7 @@ namespace DriverUART {
     uint8_t  seq;        // increments each frame
     uint32_t t_us;       // microsecond timestamp
     uint16_t flags;      // bit0 = overcurrent, etc.
+    uint16_t sample_hz;  // telemetry sampling frequency
     int16_t  enc_q15;    // encoder angle scaled to Q15
     int16_t  ipeak_q15;  // not used -> can be 0
     uint8_t  phase_peak; // which phase had max current
@@ -340,8 +341,53 @@ namespace DriverUART {
    *   - when you have a full frame: validate CRC, then write g_last_cmd
    *   - also record timestamp: g_last_cmd_us = micros32();
    */
-  void slip_feed(uint8_t /*b*/) {
-    // TODO: paste your original SLIP parser here
+  void slip_feed(uint8_t b) {
+    static uint8_t frame_buf[ACT_SIZE];
+    static size_t  frame_len   = 0;
+    static bool    in_frame    = false;
+    static bool    esc_pending = false;
+
+    if (b == SLIP_END) {
+      if (in_frame && frame_len == ACT_SIZE) {
+        const ActuationCmdV1& frame = *reinterpret_cast<const ActuationCmdV1*>(frame_buf);
+        bool header_ok = (frame.sof     == ACT_SOF &&
+                          frame.version == PROTO_VERSION_V2 &&
+                          frame.len     == (ACT_SIZE - 1));
+        if (header_ok) {
+          uint8_t crc_calc = crc8_0x07(frame_buf, ACT_SIZE - 1);
+          if (crc_calc == frame.crc8) {
+            uint32_t irq = save_and_disable_interrupts();
+            memcpy((void*)&g_last_cmd, frame_buf, sizeof(ActuationCmdV1));
+            g_last_cmd_us = micros32();
+            restore_interrupts(irq);
+          }
+        }
+      }
+
+      frame_len   = 0;
+      in_frame    = true;
+      esc_pending = false;
+      return;
+    }
+
+    if (!in_frame) {
+      return;
+    }
+
+    if (esc_pending) {
+      if      (b == SLIP_ESC_END) b = SLIP_END;
+      else if (b == SLIP_ESC_ESC) b = SLIP_ESC;
+      esc_pending = false;
+    } else if (b == SLIP_ESC) {
+      esc_pending = true;
+      return;
+    }
+
+    if (frame_len < ACT_SIZE) {
+      frame_buf[frame_len++] = b;
+    } else {
+      frame_len = ACT_SIZE + 1; // mark overflow
+    }
   }
 
   /* ---------- ADC → currents ----------
@@ -397,6 +443,7 @@ namespace DriverUART {
     f.seq        = g_seq;
     f.t_us       = micros32();
     f.flags      = 0; // could be: s.overcurrent ? FLAG_OC : 0;
+    f.sample_hz  = 1000; // telemetry rate in Hz
     f.enc_q15    = rad_to_q15(s.enc_rad);
     f.ipeak_q15  = 0; // not used
     f.phase_peak = 0; // not used
