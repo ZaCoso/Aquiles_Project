@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0.75, maximum-scale=0.75, minimum-scale=0.75, user-scalable=no">
+    <title>Proyecto Aquiles - Exoesqueleto de Asistencia Motora</title>
+    <meta name="description" content="Aquiles es un exoesqueleto de asistencia motora que combina inteligencia artificial con tecnología avanzada para mejorar la movilidad y reducir el esfuerzo al caminar.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="med/4.png" type="image/png">
+    <link rel="shortcut icon" href="med/4.png" type="image/png">
+    
+    <!-- Zoom específico solo para index.html en desktop -->
+    <style>
+        @media (min-width: 1000px) {
+            body {
+                zoom: 67%;
+            }
+        }
+        @media (max-width: 700px) {
+            body {
+                zoom: 67%;
+            }
+        }
+    </style>
+</head>
+<body>
+<!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <!-- Navegación izquierda -->
+                <nav class="nav-left">
+                    <ul>
+                        <li><a href="nav/contacto.html">Contacto</a></li>
+                        <li><a href="nav/acerca-de.html">Acerca de nosotros</a></li>
+                        <li><a href="nav/sponsors.html">Sponsors</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Logo -->
+                <div class="logo">
+                    <a href="index.html">
+                        <img src="med/1.png" alt="Proyecto Aquiles Logo">
+                    </a>
+                </div>
+
+                <!-- Navegación derecha -->
+                <nav class="nav-right">
+                    <ul>
+                        <li><a href="nav/aquiles-a1.html">Aquiles A1</a></li>
+                        <li><a href="nav/reconocimientos.html">Trayectoria</a></li>
+                        <li><a href="nav/galeria.html">Galería</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Menú móvil -->
+                <div class="mobile-menu-btn">
+                    <i class="fas fa-bars"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menú móvil desplegable -->
+        <div class="mobile-menu">
+            <ul>
+                <li><a href="nav/contacto.html">Contacto</a></li>
+                <li><a href="nav/acerca-de.html">Acerca de nosotros</a></li>
+                <li><a href="nav/sponsors.html">Sponsors</a></li>
+                <li><a href="nav/aquiles-a1.html">Aquiles A1</a></li>
+                <li><a href="nav/reconocimientos.html">Trayectoria</a></li>
+                <li><a href="nav/galeria.html">Galería</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Contenido principal -->
+    <main>
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <div class="hero-text">
+                        <h1 class="hero-title">
+                           Aquiles Project
+                        
+                        </h1>
+                        <p class="hero-subtitle">Revolucionando la movilidad humana</p>
+                        <p class="hero-description">
+                            Aquiles es un exoesqueleto de asistencia motora que utiliza un algoritmo de control complejo y tecnología avanzada para mejorar la movilidad y reducir el esfuerzo al caminar. Se adapta a distintos usuarios, optimiza cada paso y proporciona una experiencia de desplazamiento más estable y natural.
+                        </p>
+                        <div class="hero-cta">
+                            <a href="nav/acerca-de.html" class="btn">Conocer más</a>
+                            <a href="nav/contacto.html" class="btn">Contactar</a>
+                        </div>
+                    </div>
+                    <div class="hero-image">
+                        <img src="public/images/exoesqueleto-1.png" alt="Exoesqueleto Aquiles" class="exo-image">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stats Section -->
+        <section class="stats-section">
+            <div class="container">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-number" data-target="100">0%</div>
+                        <div class="stat-label">Eficiencia</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" data-target="100">0%</div>
+                        <div class="stat-label">Innovador</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" data-target="100">0%</div>
+                        <div class="stat-label">Ergonómico</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number" data-target="100">0%</div>
+                        <div class="stat-label">Adaptable</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sponsors Carousel Section -->
+        <section class="sponsors-carousel-section">
+            <div class="container">
+                <h3 class="sponsors-title">Nuestros Patrocinadores</h3>
+                <div class="sponsors-carousel">
+                    <div class="sponsors-track" id="sponsorsTrack">
+                        <img src="med/111.png" alt="Sponsor 1" class="sponsor-img">
+                        <img src="med/211.png" alt="Sponsor 2" class="sponsor-img">
+                        <img src="med/511.jpg" alt="Sponsor 3" class="sponsor-img">
+                        <img src="med/611.jpg" alt="Sponsor 4" class="sponsor-img">
+                        <img src="med/710.jpg" alt="Sponsor 5" class="sponsor-img">
+                        <img src="med/811.jpg" alt="Sponsor 6" class="sponsor-img">
+                        <img src="med/910.jpg" alt="Sponsor 7" class="sponsor-img">
+                        <img src="med/1110.jpg" alt="Sponsor 8" class="sponsor-img">
+                        <img src="med/1210.jpg" alt="Sponsor 9" class="sponsor-img">
+                        <!-- Logosoop -->
+                        <img src="med/111.png" alt="Sponsor 1" class="sponsor-img">
+                        <img src="med/211.png" alt="Sponsor 2" class="sponsor-img">
+                        <img src="med/511.jpg" alt="Sponsor 3" class="sponsor-img">
+                        <img src="med/611.jpg" alt="Sponsor 4" class="sponsor-img">
+                        <img src="med/710.jpg" alt="Sponsor 5" class="sponsor-img">
+                        <img src="med/811.jpg" alt="Sponsor 6" class="sponsor-img">
+                        <img src="med/910.jpg" alt="Sponsor 7" class="sponsor-img">
+                        <img src="med/1110.jpg" alt="Sponsor 8" class="sponsor-img">
+                        <img src="med/1210.jpg" alt="Sponsor 9" class="sponsor-img">                    </div>
+                </div>
+            </div>
+        </section>
+
+    
+
+        <!-- Exoskeleton Showcase Section -->
+        <section class="exo-showcase">
+            <div class="container">
+                <h2 class="section-title">Tecnología Avanzada</h2>
+                <p class="text-hidden"> Selecciona la parte! </p>
+                <div class="showcase-wrapper">
+                    <div class="exo-model">
+                        <div class="exo-image-container">
+                            <img src="med/BACK.png" alt="Exoesqueleto Aquiles" class="exo-main-image">
+                            <div class="hotspot" data-feature="ia" data-side="back" style="top: 24%; left: 34%;">
+                                <div class="hotspot-dot"></div>
+                                <div class="hotspot-ring"></div>
+                                <div class="hotspot-label">Sistema de control adaptativo</div>
+                            </div>
+                            <div class="hotspot" data-feature="bateria" data-side="both" style="top: 17%; left: 80%;">
+                                <div class="hotspot-dot"></div>
+                                <div class="hotspot-ring"></div>
+                                <div class="hotspot-label">Módulo Athena</div>
+                            </div>
+                            <div class="hotspot" data-feature="sensor" data-side="front" style="top: 60%; left: 20%;">
+                                <div class="hotspot-dot"></div>
+                                <div class="hotspot-ring"></div>
+                                <div class="hotspot-label">Sensores</div>
+                            </div>
+                            <div class="hotspot" data-feature="motor" data-side="both" style="top: 32%; left: 16%;">
+                                <div class="hotspot-dot"></div>
+                                <div class="hotspot-ring"></div>
+                                <div class="hotspot-label">Módulo de Asistencia Motriz</div>
+                            </div>
+                            <div class="hotspot" data-feature="regulador" data-side="both" style="top: 79%; left: 44%;">
+                                <div class="hotspot-dot"></div>
+                                <div class="hotspot-ring"></div>
+                                <div class="hotspot-label">Regulador</div>
+                            </div>
+                            <div class="hotspot" id="hotspot-volver" data-side="both" style="cursor: pointer;">
+                                <div class="hotspot-label" style="display: flex; align-items: center; gap: 6px;">
+                                    <i class="fa-solid fa-arrow-rotate-left"></i>Dar la vuelta
+                                </div>
+                            </div>
+                        </div>
+                        <div class="exo-specs">
+                            <div class="spec-panel active" id="spec-ia">
+                                <div class="spec-icon"><i class="fas fa-microchip"></i></div>
+                                <div class="spec-content">
+                                    <h3>Sistema de control adaptativo</h3>
+                                    <p>Nuestro sistema basado en un algoritmo avanzado interpreta continuamente los movimientos del usuario, ajustando la asistencia de manera dinámica para lograr un desempeño más natural y eficiente.</p>
+                                    <ul class="spec-features">
+                                        <li><i class="fas fa-check-circle"></i>Ajuste continuo al movimiento del usuario</li>
+                                        <li><i class="fas fa-check-circle"></i>Adaptación en tiempo real a distintos ritmos de marcha</li>
+                                        <li><i class="fas fa-check-circle"></i>Optimización progresiva de la asistencia motriz</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="spec-panel" id="spec-bateria">
+                                <div class="spec-icon"><i class="fas fa-brain"></i></i></div>
+                                <div class="spec-content">
+                                    <h3>Módulo Athena</h3>
+                                    <p>Ubicado en la zona lumbar, concentra la lógica central del sistema y el mecanismo automático de ajuste del cinturón.</p>
+                                    <ul class="spec-features">
+                                        <li><i class="fas fa-check-circle"></i>Microcontrolador principal y electrónica central</li>
+                                        <li><i class="fas fa-check-circle"></i>Sistema de corredera con ajuste automático</li>
+                                        <li><i class="fas fa-check-circle"></i>Inserto de teflón para precisión y durabilidad</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="spec-panel" id="spec-sensor">
+                                <div class="spec-icon"><i class="fas fa-tachometer-alt"></i></div>
+                                <div class="spec-content">
+                                    <h3>Sensores de Alta Precisión</h3>
+                                    <p>Nuestros sensores captan cada movimiento con precisión milimétrica, permitiendo una respuesta instantánea y fluida que se sincroniza perfectamente con tus pasos.</p>
+                                    <ul class="spec-features">
+                                        <li><i class="fas fa-check-circle"></i> Detección de movimiento 3D</li>
+                                        <li><i class="fas fa-check-circle"></i> Respuesta en milisegundos</li>
+                                        <li><i class="fas fa-check-circle"></i> Calibración automática</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="spec-panel" id="spec-regulador">
+                                <div class="spec-icon"><i class="fas fa-tachometer-alt"></i></div>
+                                <div class="spec-content">
+                                    <h3>Ajuste Ergonómico</h3>
+                                    <p>Nuestro sistema de regulación adaptable se ajusta con precisión a la anatomía de cada usuario, garantizando comodidad, estabilidad y una integración natural con el cuerpo.
+                                    </p>
+                                    <ul class="spec-features">
+                                        <li><i class="fas fa-check-circle"></i>Ajuste dinámico para distintas morfologías</li>
+                                        <li><i class="fas fa-check-circle"></i>Diseño ergonómico y liviano</li>
+                                        <li><i class="fas fa-check-circle"></i>Fijación segura y no invasiva</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="spec-panel" id="spec-motor">
+                                <div class="spec-icon"><i class="fas fa-cog"></i></div>
+                                <div class="spec-content">
+                                    <h3>Motores de Alto Rendimiento</h3>
+                                    <p>Motores ultraligeros y potentes que proporcionan la fuerza necesaria para reducir el esfuerzo al caminar, con un funcionamiento silencioso y eficiente.</p>
+                                    <ul class="spec-features">
+                                        <li><i class="fas fa-check-circle"></i> Potencia ajustable</li>
+                                        <li><i class="fas fa-check-circle"></i> Funcionamiento silencioso</li>
+                                        <li><i class="fas fa-check-circle"></i> Eficiencia energética</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tech-specs">
+                        <div class="spec-tabs">
+                            <button class="spec-tab active" data-spec="dimensions">Dimensiones</button>
+                            <button class="spec-tab" data-spec="performance">Rendimiento</button>
+                            <button class="spec-tab" data-spec="materials">Materiales</button>
+                            <button class="spec-tab" data-spec="compatibility">Compatibilidad</button>
+                        </div>
+                        <div class="spec-content-wrapper">
+                            <div class="spec-content-panel active" id="dimensions">
+                                <div class="spec-data">
+                                    <div class="spec-item">
+                                        <div class="spec-label">Peso</div>
+                                        <div class="spec-value">1.2 kg</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Altura ajustable</div>
+                                        <div class="spec-value">150-195 cm</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Grosor</div>
+                                        <div class="spec-value">2.5 cm</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Tamaño de batería</div>
+                                        <div class="spec-value">10 x 5 x 2 cm</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="spec-content-panel" id="performance">
+                                <div class="spec-data">
+                                    <div class="spec-item">
+                                        <div class="spec-label">Asistencia máxima</div>
+                                        <div class="spec-value">40% reducción de esfuerzo</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Autonomía</div>
+                                        <div class="spec-value">1 hora</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Tiempo de respuesta</div>
+                                        <div class="spec-value">8 ms</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Velocidad máxima</div>
+                                        <div class="spec-value">8 km/h</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="spec-content-panel" id="materials">
+                                <div class="spec-data">
+                                    <div class="spec-item">
+                                        <div class="spec-label">Estructura</div>
+                                        <div class="spec-value">Aleación de titanio</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Articulaciones</div>
+                                        <div class="spec-value">Fibra de carbono</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Correas</div>
+                                        <div class="spec-value">Neopreno hipoalergénico</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Carcasa</div>
+                                        <div class="spec-value">Polímero de alta resistencia</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="spec-content-panel" id="compatibility">
+                                <div class="spec-data">
+                                    <div class="spec-item">
+                                        <div class="spec-label">Rango de edad</div>
+                                        <div class="spec-value">16-85 años</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Peso soportado</div>
+                                        <div class="spec-value">40-120 kg</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">Conectividad</div>
+                                        <div class="spec-value">Bluetooth 5.2, WiFi</div>
+                                    </div>
+                                    <div class="spec-item">
+                                        <div class="spec-label">App compatible</div>
+                                        <div class="spec-value">iOS 14+, Android 10+</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reproductor de video-->
+        <section class="carousel-section">
+            <h2 class="section-title">Video de presentación</h2>
+            <div class="video-wrapper">
+                <iframe 
+                src="https://www.youtube.com/embed/tkjRqst9peo?si=hxe4cGb1_Ot04OSV" 
+                title="YouTube video player" 
+                frameborder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                referrerpolicy="strict-origin-when-cross-origin" 
+                allowfullscreen>
+                </iframe>
+            </div>
+        </section>
+
+        <!-- App Showcase Section -->
+        <section class="app-showcase">
+            <div class="app-bg-wrapper">
+                <div class="container1">
+                    <div class="app-content">
+                        <div class="app-info">
+                            <h2 class="app-title">Controla tu Exoesqueleto</h2>
+                            <h3 class="app-subtitle">Desde tu Smartphone</h3>
+                            <p class="app-description">Descarga nuestra aplicación móvil y lleva el control total de tu exoesqueleto AQUILES en la palma de tu mano. Ajusta la potencia, monitorea la batería, registra tu actividad y personaliza tu experiencia de movilidad.</p>
+                            <ul class="app-features">
+                                <li><i class="fas fa-check-circle"></i> Control en tiempo real</li>
+                                <li><i class="fas fa-check-circle"></i> Estadísticas de uso</li>
+                                <li><i class="fas fa-check-circle"></i> Personalización avanzada</li>
+                                <li><i class="fas fa-check-circle"></i> Diagnósticos automáticos</li>
+                            </ul>
+                            <div class="app-buttons">
+                                <a href="https://drive.google.com/drive/folders/1Z1zS6MrvtOG-DlGeu_qQDY4mIO2Ay2mm?usp=sharing" class="google-play-button">
+                                    <div class="play-button-content">
+                                        <div class="play-logo"><i class="fab fa-google-play"></i></div>
+                                        <div class="play-text">
+                                            <span class="small-text">DISPONIBLE EN</span>
+                                            <span class="big-text">Google Play</span>
+                                        </div>
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                        <!-- <div class="app-mockup">
+                            <div class="phone-frame">
+                                <div class="phone-screen">
+                                    <div class="app-screen" id="appScreen">
+                                        <img src="med/PAG.png" class="app-screenshot">
+                                    </div>
+                                </div>
+                                <div class="phone-button"></div>
+                            </div>
+                        </div> -->
+                        
+                        <!-- Iphone 16 -->
+                        <div class="iphone-container">
+                            <!-- Dynamic Island -->
+                            <div class="dynamic-island"></div>
+                            
+                            <!-- Botones laterales -->
+                            <div class="side-button volume-up"></div>
+                            <div class="side-button volume-down"></div>
+                            <div class="side-button power-button"></div>
+                            
+                            <!-- Pantalla con tu imagen -->
+                            <div class="screen">
+                                <img src="med/PAG.png" alt="Exoesqueleto X1 App">
+                            </div>
+                        </div>
+
+                        
+                    </div>
+                </div>
+
+
+
+
+                <style>
+                
+                </style>
+
+
+
+
+
+
+
+
+
+
+                <!-- <div class="app-particles" id="appParticles"></div> -->
+                <div class="app-buttons-mobile">
+                    <a href="#" class="google-play-button">
+                        <div class="play-button-content">
+                            <div class="play-logo"><i class="fab fa-google-play"></i></div>
+                            <div class="play-text">
+                                <span class="small-text">DISPONIBLE EN</span>
+                                <span class="big-text">Google Play</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Services Section -->
+        <!-- <section class="services">
+            <div class="container">
+                <h2 class="section-title">Nuestros Servicios y Soluciones</h2>
+                <div class="services-grid">
+                    <div class="service-card">
+                        <div class="service-icon"><i class="fas fa-cogs"></i></div>
+                        <h3>Personalización del Exoesqueleto</h3>
+                        <p>Adaptamos AQUILES a las necesidades específicas de cada usuario, ajustando parámetros como fuerza, velocidad y rangos de movimiento para garantizar una experiencia óptima y personalizada.</p>
+                    </div>
+                    <div class="service-card">
+                        <div class="service-icon"><i class="fas fa-tools"></i></div>
+                        <h3>Mantenimiento y Soporte</h3>
+                        <p>Ofrecemos servicios de mantenimiento preventivo, actualizaciones de software y soporte técnico para asegurar el funcionamiento óptimo de tu exoesqueleto AQUILES en todo momento.</p>
+                    </div>
+                    <div class="service-card">
+                        <div class="service-icon"><i class="fas fa-graduation-cap"></i></div>
+                        <h3>Capacitación y Entrenamiento</h3>
+                        <p>Proporcionamos sesiones de capacitación completas para usuarios y cuidadores, asegurando un uso seguro y eficiente del exoesqueleto AQUILES y maximizando sus beneficios.</p>
+                    </div>
+                    <div class="service-card">
+                        <div class="service-icon"><i class="fas fa-mobile-alt"></i></div>
+                        <h3>Aplicación Móvil Personalizada</h3>
+                        <p>Desarrollamos y actualizamos nuestra app móvil que permite monitorear en tiempo real el rendimiento del exoesqueleto, ajustar configuraciones y realizar un seguimiento de la actividad física.</p>
+                    </div>
+                    <div class="service-card">
+                        <div class="service-icon"><i class="fas fa-chart-line"></i></div>
+                        <h3>Análisis de Rendimiento</h3>
+                        <p>Evaluamos periódicamente el rendimiento del exoesqueleto y proporcionamos informes detallados sobre patrones de uso, eficiencia energética y recomendaciones para mejorar la experiencia.</p>
+                    </div>
+                    <div class="service-card">
+                        <div class="service-icon"><i class="fas fa-users"></i></div>
+                        <h3>Comunidad de Usuarios</h3>
+                        <p>Facilitamos la conexión entre usuarios de AQUILES para compartir experiencias, consejos y mejores prácticas, creando una comunidad de apoyo para maximizar los beneficios del exoesqueleto.</p>
+                    </div>
+                </div>
+            </div>
+        </section> -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <div class="footer-logo">
+                        <img src="med/1.png" alt="Proyecto Aquiles Logo">
+                        <span>Proyecto Aquiles</span>
+                    </div>
+                    
+                    <div class="eslogan">   
+                        <p>Revolucionando la movilidad humana</p>
+                    </div>
+                </div>
+    
+                <div class="footer-links">
+                    <h3>Accesos Rápidos</h3>
+                    <ul>
+                        <li><a href="index.html">Inicio</a></li>
+                        <li><a href="nav/acerca-de.html">Acerca de Nosotros</a></li>
+                        <li><a href="nav/reconocimientos.html">Trayectoria</a></li>
+                        <li><a href="nav/galeria.html">Galería</a></li>
+                        <li><a href="nav/contacto.html">Contacto</a></li>
+                    </ul>
+                </div>
+    
+                <div class="footer-contact">
+                    <h3>Contacto</h3>
+                    <ul>
+                        <li><i class="fas fa-map-marker-alt"></i>Escuela de Educación Secundaria Técnica (EEST) Nº7 "Taller Regional Quilmes" IMPA</li>
+                        <li><i class="fas fa-phone"></i> +54 9 11 3585 2406</li>
+                        <li><i class="fas fa-envelope"></i>projectaquiles@gmail.com</li>
+                    </ul>
+                </div>
+    
+                <div class="footer-social">
+                    <h3>Síguenos</h3>
+                    <div class="social-icons">
+                        <a href="https://www.instagram.com/aquiles.project/" target="_blank"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.linkedin.com/company/aquiles-project/about/"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="https://youtube.com/@aquilesproject?si=hjGjSXgWbFqAbJPA" target="_blank"><i class="fab fa-youtube"></i></a>
+                    </div>
+                </div>
+            </div>
+    
+            <div class="footer-bottom">
+                <p>&copy; <span id="current-year"></span> Proyecto Aquiles. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- The Visual Cue -->
+    <div class="mobile-cue" id="mobileCue">
+        <div class="mobile-cue-arrow">
+            <i class="fas fa-arrow-down"></i>
+        </div>
+        <div class="mobile-cue-text">Desliza para explorar</div>
+    </div>
+
+    <script src="script.js"></script>
+    
+</body>
+</html>

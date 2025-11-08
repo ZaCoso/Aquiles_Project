@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acerca de Nosotros - Proyecto Aquiles</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="../med/4.png" type="image/png">
+    <link rel="shortcut icon" href="../med/4.png" type="image/png">
+    <style>
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+        }
+        
+        .team-member {
+            height: 700px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow: visible;
+        }
+        
+        .member-avatar {
+            width: 120px;
+            height: 120px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            background-color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 3px solid var(--color-medium-teal);
+        }
+        
+        .member-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        
+        .team-member h3 {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        .member-position {
+            height: 20px;
+            margin: 5px 0;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .step-features {
+            height: 300px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-evenly;
+            align-items: center;
+            text-align: center;
+        }
+        
+        .member-social {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .member-social a {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 35px;
+            height: 35px;
+            background-color: var(--color-medium-teal);
+            color: var(--color-white);
+            border-radius: 50%;
+            transition: background-color 0.3s ease;
+            position: relative;
+        }
+        
+        .member-social a:hover {
+            background-color: var(--color-dark-teal);
+        }
+
+        .member-social a[href^="mailto:"] {
+            position: relative;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 768px) {
+            .team-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .team-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .copy-tooltip {
+            position: fixed;
+            background-color: var(--color-dark-teal);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        .hover-tooltip {
+            position: fixed;
+            background: --color-dark-teal;
+    
+            color: #8ccbd5;
+            padding: 5px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            text-shadow: 0 0 10px rgba(140, 203, 213, 0.7), 0 0 20px rgba(140, 203, 213, 0.4), 0 0 30px rgba(140, 203, 213, 0.1);
+        }
+        
+        .hover-tooltip.copied {
+            color: #8ccbd5;
+            text-shadow: 0 0 10px rgba(140, 203, 213, 0.7), 0 0 20px rgba(140, 203, 213, 0.4), 0 0 30px rgba(140, 203, 213, 0.1);
+            animation: neonPulse 1s ease-in-out infinite alternate;
+        }
+        
+        @keyframes neonPulse {
+            from {
+                text-shadow: 0 0 10px rgba(140, 203, 213, 0.7), 0 0 20px rgba(140, 203, 213, 0.4), 0 0 30px rgba(140, 203, 213, 0.1);
+            }
+            to {
+                text-shadow: 0 0 15px rgba(140, 203, 213, 1), 0 0 25px rgba(140, 203, 213, 0.6), 0 0 35px rgba(140, 203, 213, 0.3);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <!-- Navegación izquierda -->
+                <nav class="nav-left">
+                    <ul>
+                        <li><a href="contacto.html">Contacto</a></li>
+                        <li><a href="acerca-de.html" class="active">Acerca de nosotros</a></li>
+                        <li><a href="sponsors.html">Sponsors</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Logo -->
+                <div class="logo">
+                    <a href="../index.html">
+                        <img src="../med/1.png" alt="Proyecto Aquiles Logo">
+                    </a>
+                </div>
+
+                <!-- Navegación derecha -->
+                <nav class="nav-right">
+                    <ul>
+                        <li><a href="aquiles-a1.html">Aquiles A1</a></li>
+                        <li><a href="reconocimientos.html">Trayectoria</a></li>
+                        <li><a href="galeria.html">Galería</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Menú móvil -->
+                <div class="mobile-menu-btn">
+                    <i class="fas fa-bars"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menú móvil desplegable -->
+        <div class="mobile-menu">
+            <ul>
+                <li><a href="contacto.html">Contacto</a></li>
+                <li><a href="acerca-de.html" class="active">Acerca de nosotros</a></li>
+                <li><a href="sponsors.html">Sponsors</a></li>
+                <li><a href="aquiles-a1.html">Aquiles A1</a></li>
+                <li><a href="reconocimientos.html">Trayectoria</a></li>
+                <li><a href="galeria.html">Galería</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Contenido principal -->
+    <main>
+        <section class="page-header">
+            <div class="container">
+                <h1>Acerca de Nosotros</h1>
+            </div>
+        </section>
+
+        <section class="about-history">
+            <div class="container">
+                <div class="about-card">
+                    <div class="about-content">
+                        <div class="about-image">
+                            <img src="../med/4.png" alt="Logo Proyecto Aquiles">
+                        </div>
+                        <div class="about-text">
+                            <h2>Nuestra Historia</h2>
+                            <p>Todo comenzó con una simple observación: muchas personas enfrentan dificultades al caminar, ya sea por fatiga, debilidad muscular, edad, sobrepeso o estatura elevada. Para algunos, cada paso representa un esfuerzo enorme, limitando su movilidad y afectando su calidad de vida. Nos preguntamos: ¿y si pudiéramos crear algo que les diera el impulso necesario para seguir avanzando sin restricciones?</p>
+
+                              <p>La idea nació en medio de un proyecto de investigación sobre asistencia motora. Inspirados por los exoesqueletos industriales y médicos, quisimos llevar esa tecnología un paso más allá, diseñando un dispositivo que no solo brindara soporte, sino que aprendiera y se adaptara a cada usuario. Así surgió AQUILES, un exoesqueleto ligero, intuitivo y eficiente, capaz de reducir el esfuerzo al caminar y mejorar la estabilidad sin interferir con el movimiento natural.</p>
+                            <p>Hoy, AQUILES representa más que un avance tecnológico. Es el resultado de la pasión por la innovación, la búsqueda de soluciones reales y el deseo de hacer la movilidad accesible para todos. Creemos en un futuro donde el esfuerzo no sea un obstáculo, sino una oportunidad para seguir avanzando con confianza y libertad.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="team">
+            <div class="container">
+                <h2>Nuestro Equipo</h2>
+                <div class="team-grid">
+                    <div class="team-member">
+                        <div class="member-avatar">
+                            <img src="../med/f_perfil/1ji.jpg" alt="Juan Cruz Isola" onerror="this.style.display='none'; this.parentElement.innerHTML='P1';">
+                        </div>
+                        <!-- <div class="member-avatar">
+                            <img src="../med/profile-placeholder.jpg" alt="Misael Castillo" onerror="this.style.display='none'; this.parentElement.innerHTML='P1';">
+                        </div> -->
+                        <h3>Juan Cruz Isola</h3>
+                        <p class="member-position">Roles</p>
+                        <div class="step-features">
+                            <span></i>Diseño gráfico</span>
+                            <span></i>Community manager</span>
+                        </div>
+                        <div class="member-social">
+                            <a href="mailto:juancruz.isola2209@gmail.com"><i class="fas fa-envelope"></i></a>
+                            <a href="https://github.com/juanisola"><i class="fab fa-github"></i></a>
+                            <a href="https://www.linkedin.com/in/juan-cruz-isola-11309035a/"><i class="fab fa-linkedin-in"></i></a>
+                            <a href="https://www.instagram.com/juanisola_/"><i class="fab fa-instagram"></i></a>
+                        </div>
+                    </div>
+                    <div class="team-member">
+                        <!-- <div class="member-avatar">
+                            <img src="../med/profile-placeholder.jpg" alt="Misael Castillo" onerror="this.style.display='none'; this.parentElement.innerHTML='P2';">
+                        </div> -->
+                        <div class="member-avatar">
+                            <img src="../med/f_perfil/1mj.jpg" alt="Juan Ignacio Montilla" onerror="this.style.display='none'; this.parentElement.innerHTML='P2';">
+                        </div>
+                        <h3>Juan Ignacio Montilla</h3>
+                        <p class="member-position">Roles</p>
+                        <div class="step-features">
+                            <span></i>Programación de la app Móvil</span>
+                            <span></i>Desarrollo y ensayo de hardware electrónico</span>
+                            <span></i>Desarrollo de software embebido</span>
+                        </div>
+                        <div class="member-social">
+                            <a href="mailto:montillajuanignacio@gmail.com"><i class="fas fa-envelope"></i></a>
+                            <a href="https://github.com/Monti3"><i class="fab fa-github"></i></a>
+                            <a href="https://www.linkedin.com/in/juan-ignacio-montilla-b98064358/"><i class="fab fa-linkedin-in"></i></a>
+                            <a href="https://www.instagram.com/montillajuanignacio/"><i class="fab fa-instagram"></i></a>
+                        </div>
+                    </div>
+                    <div class="team-member">
+                        <!-- <div class="member-avatar">
+                            <img src="../med/profile-placeholder.jpg" alt="Mauricio Trillo Contardi" onerror="this.style.display='none'; this.parentElement.innerHTML='P3';">
+                        </div> -->
+                        <div class="member-avatar">
+                            <img src="../med/f_perfil/1mt.jpg" alt="Misael Castillo" onerror="this.style.display='none'; this.parentElement.innerHTML='P4';">
+                        </div>
+                        <h3>Mauricio Trillo Contardi</h3>
+                        <p class="member-position">Roles</p>
+                        <div class="step-features">
+                            <span></i>Puesta a punto</span>
+                            <span></i>Creación de la documentación</span>
+                            <span></i>Tracking de tareas</span>
+                            <span></i>Soldadura de placas</span>
+                        </div>
+                        <div class="member-social">
+                            <a href="mailto:trillocontardimauricio@gmail.com"><i class="fas fa-envelope"></i></a>
+                            <a href="https://github.com/MauricioTrillo"><i class="fab fa-github"></i></a>
+                            <a href="https://www.linkedin.com/in/mauricio-trillo-contardi-68bbba35a/"><i class="fab fa-linkedin-in"></i></a>
+                            <a href="https://www.instagram.com/mauritrillo_/"><i class="fab fa-instagram"></i></a>
+                        </div>
+                    </div>
+                    <div class="team-member">
+                        <!-- <div class="member-avatar">
+                            <img src="../med/profile-placeholder.jpg" alt="Misael Castillo" onerror="this.style.display='none'; this.parentElement.innerHTML='P4';">
+                        </div> -->
+                        <div class="member-avatar">
+                            <img src="../med/f_perfil/1cm.jpg" alt="Misael Castillo" onerror="this.style.display='none'; this.parentElement.innerHTML='P4';">
+                        </div>
+                        <h3>Misael Castillo</h3>
+                        <p class="member-position">Roles</p>
+                        <div class="step-features">
+                            <span></i>Desarrollo de hardware mecánico</span>
+                            <span></i>Diseño y análisis estructural</span>
+                            <span></i>Ensayo electrónico</span>
+                            <span></i>Desarrollo estético web</span>
+                            <span></i>Desarrollo de UI/UX de la app mobile</span>
+                        </div>
+                        <div class="member-social">
+                            <a href="mailto:misacastillo08@gmail.com"><i class="fas fa-envelope"></i></a>
+                            <a href="https://github.com/misaacastillo"><i class="fab fa-github"></i></a>
+                            <a href="https://www.linkedin.com/in/misael-castillo-0a52a1314/"><i class="fab fa-linkedin-in"></i></a>
+                            <a href="https://www.instagram.com/misaacas/"><i class="fab fa-instagram"></i></a>
+                        </div>
+                    </div>
+                    <div class="team-member">
+                        <!-- <div class="member-avatar">
+                            <img src="../med/profile-placeholder.jpg" alt="Misael Castillo" onerror="this.style.display='none'; this.parentElement.innerHTML='P5';">
+                        </div> -->
+                        <div class="member-avatar">
+                            <img src="../med/f_perfil/1rl.jpg" alt="Rodrigo Alexis Lin" onerror="this.style.display='none'; this.parentElement.innerHTML='P5';">
+                        </div>
+                        <h3>Rodrigo Alexis Lin</h3>
+                        <p class="member-position">Roles</p>
+                        <div class="step-features">
+                            <span></i>Arquitecto de software</span>
+                            <span></i>Desarrollador de sistemas embebidos</span>
+                            <span></i>Validador de seguridad</span>
+                        </div>
+                        <div class="member-social">
+                            <a href="mailto:alexisrodrigolin@gmail.com"><i class="fas fa-envelope"></i></a>
+                            <a href="https://github.com/alexisrodrigolin"><i class="fab fa-github"></i></a>
+                            <a href="https://www.linkedin.com/in/rodrigo-lin-61210a35b/"><i class="fab fa-linkedin-in"></i></a>
+                            <a href="https://www.instagram.com/alexisrodrigolin/"><i class="fab fa-instagram"></i></a>
+                        </div>
+                    </div>
+
+                    <div class="team-member">
+                        <div class="member-avatar">
+                            <img src="../med/f_perfil/1sz.jpg" alt="Santiago Alberto Zacarias" onerror="this.style.display='none'; this.parentElement.innerHTML='P6';">
+                        </div>
+                        <!-- <div class="member-avatar">
+                            <img src="../med/profile-placeholder.jpg" alt="Misael Castillo" onerror="this.style.display='none'; this.parentElement.innerHTML='P6';">
+                        </div> -->
+                        <h3>Santiago Alberto Zacarias</h3>
+                        <p class="member-position">Roles</p>
+                        <div class="step-features">
+                            <span></i>Diseño Funcional Web</span>
+                            <span></i>Armado y control de calidad de placas</span>
+                            <span></i>Ensayo electrónico</span>
+                        </div>
+                        <div class="member-social">
+                            <a href="mailto:sanfran120771@gmail.com"><i class="fas fa-envelope"></i></a>
+                            <a href="https://github.com/ZaCoso"><i class="fab fa-github"></i></a>
+                            <a href="https://www.linkedin.com/in/santiago-zacar%C3%ADas-3a3978319/"><i class="fab fa-linkedin-in"></i></a>
+                            <a href="https://www.instagram.com/santizaca_/"><i class="fab fa-instagram"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+<!-- 
+        <section class="values">
+            <div class="container">
+                <div class="values-card">
+                    <h2>Nuestros Valores</h2>
+                    <div class="values-grid">
+                        <div class="value-item">
+                            <div class="value-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="value-content">
+                                <h3>Compromiso</h3>
+                                <p>En Proyecto AQUILES, el compromiso significa dedicación total a mejorar la movilidad de quienes más lo necesitan. Nos enfocamos en desarrollar tecnología accesible y funcional, garantizando que cada usuario reciba un producto seguro, eficiente y adaptable a sus necesidades.</p>
+                            </div>
+                        </div>
+                        <div class="value-item">
+                            <div class="value-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="value-content">
+                                <h3>Innovación</h3>
+                                <p>Buscamos constantemente nuevas soluciones para optimizar la asistencia motora. AQUILES integra inteligencia artificial y tecnología avanzada para ofrecer un exoesqueleto intuitivo, ligero y eficaz, que se adapta en tiempo real al movimiento del usuario.</p>
+                            </div>
+                        </div>
+                        <div class="value-item">
+                            <div class="value-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="value-content">
+                                <h3>Excelencia</h3>
+                                <p>Nos esforzamos por alcanzar los más altos estándares en cada etapa del desarrollo. Desde el diseño hasta la implementación, cada detalle de AQUILES es cuidadosamente optimizado para brindar una experiencia de uso fluida, cómoda y segura.</p>
+                            </div>
+                        </div>
+                        <div class="value-item">
+                            <div class="value-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="value-content">
+                                <h3>Integridad</h3>
+                                <p>Actuamos con transparencia, responsabilidad y ética en cada decisión. Nos comprometemos a ofrecer un producto confiable y de calidad, siempre priorizando el bienestar y la seguridad de nuestros usuarios.</p>
+                            </div>
+                        </div>
+                        <div class="value-item">
+                            <div class="value-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="value-content">
+                                <h3>Accesibilidad</h3>
+                                <p>Creemos que la tecnología debe estar al alcance de todos. Por eso, diseñamos AQUILES como una solución inclusiva, adaptable y fácil de usar, brindando asistencia a quienes más lo necesitan sin complejidades ni barreras.</p>
+                            </div>
+                        </div>
+                        <div class="value-item">
+                            <div class="value-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <div class="value-content">
+                                <h3>Impacto Social</h3>
+                                <p>Más allá de la tecnología, nuestro objetivo es generar un cambio positivo en la vida de las personas. AQUILES no solo mejora la movilidad, sino que también impulsa la independencia, la confianza y la calidad de vida de sus usuarios.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section> -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <div class="footer-logo">
+                        <img src="../med/1.png" alt="Proyecto Aquiles Logo">
+                        <span>Proyecto Aquiles</span>
+                    </div>
+                    
+                    <div class="eslogan">   
+                        <p>Revolucionando la movilidad humana</p>
+                    </div>
+                </div>
+    
+                <div class="footer-links">
+                    <h3>Accesos Rápidos</h3>
+                    <ul>
+                        <li><a href="../index.html">Inicio</a></li>
+                        <li><a href="acerca-de.html">Acerca de Nosotros</a></li>
+                        <li><a href="aquiles-a1.html">Aquiles A1</a></li>
+                        <li><a href="sponsors.html">Sponsors</a></li>
+                        <li><a href="reconocimientos.html">Trayectoria</a></li>
+                        <li><a href="galeria.html">Galería</a></li>
+                        <li><a href="contacto.html">Contacto</a></li>
+                    </ul>
+                </div>
+    
+                <div class="footer-contact">
+                    <h3>Contacto</h3>
+                    <ul>
+                        <li><i class="fas fa-map-marker-alt"></i>Escuela de Educación Secundaria Técnica (EEST) Nº7 "Taller Regional Quilmes" IMPA</li>
+                        <li><i class="fas fa-phone"></i> +54 9 11 3585 2406</li>
+                        <li><i class="fas fa-envelope"></i>projectaquiles@gmail.com</li>
+                    </ul>
+                </div>
+    
+                <div class="footer-social">
+                    <h3>Síguenos</h3>
+                    <div class="social-icons">
+                        <a href="https://www.instagram.com/aquiles.project/" target="_blank"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.linkedin.com/company/aquiles-project/about/"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="https://youtube.com/@aquilesproject?si=hjGjSXgWbFqAbJPA" target="_blank"><i class="fab fa-youtube"></i></a>
+                    </div>
+                </div>
+            </div>
+    
+            <div class="footer-bottom">
+                <p>&copy; <span id="current-year"></span> Proyecto Aquiles. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+    <script>
+        // Function to copy text to clipboard
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show feedback to user
+                const tooltip = document.createElement('div');
+                tooltip.className = 'copy-tooltip';
+                tooltip.textContent = '¡Copiado!';
+                document.body.appendChild(tooltip);
+                
+                // Position tooltip near the clicked element
+                const rect = event.target.getBoundingClientRect();
+                tooltip.style.top = `${rect.top - 30}px`;
+                tooltip.style.left = `${rect.left + (rect.width / 2) - 30}px`;
+                
+                // Remove tooltip after 2 seconds
+                setTimeout(() => {
+                    tooltip.remove();
+                }, 2000);
+            }).catch(err => {
+                console.error('Error al copiar: ', err);
+            });
+        }
+
+        // Add event listeners to all email links
+        document.addEventListener('DOMContentLoaded', () => {
+            const emailLinks = document.querySelectorAll('a[href^="mailto:"]');
+            let hoverTooltip = null;
+            let currentLink = null; // Guardar referencia al enlace actual
+            
+            emailLinks.forEach(link => {
+                // Hover events
+                link.addEventListener('mouseenter', (e) => {
+                    // Remove existing tooltip
+                    if (hoverTooltip) {
+                        hoverTooltip.remove();
+                        hoverTooltip = null;
+                    }
+                    
+                    // Create hover tooltip
+                    hoverTooltip = document.createElement('div');
+                    hoverTooltip.className = 'hover-tooltip';
+                    hoverTooltip.textContent = 'Copiar';
+                    document.body.appendChild(hoverTooltip);
+                    
+                    // Position tooltip - always recalculate position
+                    const rect = link.getBoundingClientRect();
+                    const tooltipOffsetX = -26.5; // AJUSTA ESTE VALOR para centrar horizontalmente (más negativo = más a la izquierda)
+                    const tooltipOffsetY = -30; // AJUSTA ESTE VALOR para la altura (más negativo = más arriba)
+                    
+                    hoverTooltip.style.top = `${rect.top + tooltipOffsetY}px`;
+                    hoverTooltip.style.left = `${rect.left + (rect.width / 2) + tooltipOffsetX}px`;
+                    hoverTooltip.style.opacity = '1';
+                    
+                    // Guardar referencia al enlace actual
+                    currentLink = link;
+                });
+                
+                link.addEventListener('mouseleave', () => {
+                    if (hoverTooltip) {
+                        hoverTooltip.remove();
+                        hoverTooltip = null;
+                        currentLink = null;
+                    }
+                });
+                
+                // Click event
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const email = link.href.replace('mailto:', '');
+                    
+                    // Change tooltip to checkmark
+                    if (hoverTooltip && currentLink === link) {
+                        hoverTooltip.textContent = '✓';
+                        hoverTooltip.classList.add('copied');
+                        
+                        // Re-center the tooltip for the checkmark using the clicked link position
+                        const rect = link.getBoundingClientRect();
+                        const tooltipOffsetX = -13; // (más negativo = mas izquierda)
+                        const tooltipOffsetY = -30; // Mantén la misma altura
+                        
+                        hoverTooltip.style.top = `${rect.top + tooltipOffsetY}px`;
+                        hoverTooltip.style.left = `${rect.left + (rect.width / 2) + tooltipOffsetX}px`;
+                        
+                        // Reset after 2 seconds
+                        setTimeout(() => {
+                            if (hoverTooltip && currentLink === link) {
+                                hoverTooltip.textContent = 'Copiar';
+                                hoverTooltip.classList.remove('copied');
+                                
+                                // Re-center for "Copiar" text using the same link position
+                                const rectReset = link.getBoundingClientRect();
+                                const tooltipOffsetXReset = -26.5; // Valor original para "Copiar"
+                                hoverTooltip.style.left = `${rectReset.left + (rectReset.width / 2) + tooltipOffsetXReset}px`;
+                            }
+                        }, 2000);
+                    }
+                    
+                    copyToClipboard(email);
+                });
+            });
+        });
+    </script>
+    <script src="../script.js"></script>
+</body>
+</html>

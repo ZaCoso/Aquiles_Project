@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contacto - Proyecto Aquiles</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="../med/4.png" type="image/png">
+    <link rel="shortcut icon" href="../med/4.png" type="image/png">
+    <style>
+        .info-card p {
+            text-align: center;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <!-- Navegación izquierda -->
+                <nav class="nav-left">
+                    <ul>
+                        <li><a href="contacto.html" class="active">Contacto</a></li>
+                        <li><a href="acerca-de.html">Acerca de nosotros</a></li>
+                        <li><a href="sponsors.html">Sponsors</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Logo -->
+                <div class="logo">
+                    <a href="../index.html">
+                        <img src="../med/1.PNG" alt="Proyecto Aquiles Logo">
+                    </a>
+                </div>
+
+                <!-- Navegación derecha -->
+                <nav class="nav-right">
+                    <ul>
+                        <li><a href="aquiles-a1.html">Aquiles A1</a></li>
+                        <li><a href="reconocimientos.html">Trayectoria</a></li>
+                        <li><a href="galeria.html">Galería</a></li>
+                    </ul>
+                </nav>
+
+                <!-- Menú móvil -->
+                <div class="mobile-menu-btn">
+                    <i class="fas fa-bars"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menú móvil desplegable -->
+        <div class="mobile-menu">
+            <ul>
+                <li><a href="contacto.html" class="active">Contacto</a></li>
+                <li><a href="acerca-de.html">Acerca de nosotros</a></li>
+                <li><a href="sponsors.html">Sponsors</a></li>
+                <li><a href="aquiles-a1.html">Aquiles A1</a></li>
+                <li><a href="reconocimientos.html">Trayectoria</a></li>
+                <li><a href="galeria.html">Galería</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Contenido principal -->
+    <main>
+        <section class="page-header">
+            <div class="container">
+                <h1>Contacto</h1>
+                <!-- <p class="caxcax">En nuestro equipo buscamos constantemente mejorar Aquiles, y por eso queremos sumar personas apasionadas por la idea y con ganas de contribuir. Si te motiva el desafío de crear, innovar y hacer crecer este proyecto, te invitamos a ser parte. Tu talento y entusiasmo pueden marcar la diferencia. ¡Sumate y construyamos juntos el futuro de Aquiles!</p> -->
+            </div>
+        </section>
+
+        <section class="contact-form">
+            <div class="container">
+                <div class="form-container">
+                    <form action="https://formspree.io/f/xzzevgdr" method="POST" target="_blank">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="nombre">Nombre</label>
+                                <input type="text" id="nombre" name="nombre" placeholder="Tu nombre" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="email">Email</label>
+                                <input type="email" id="email" name="email" placeholder="tu@email.com" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="asunto">Asunto</label>
+                            <input type="text" id="asunto" name="asunto" placeholder="Asunto de tu mensaje" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="mensaje">Mensaje</label>
+                            <textarea id="mensaje" name="mensaje" placeholder="Escribe tu mensaje aquí..." rows="5" required></textarea>
+                        </div>
+                        <button type="submit" class="btn">Enviar Mensaje</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+<!-- MAPA -->
+        <div class="map-container" style="padding-bottom: 80px;">
+            <div class="map-header">
+                <h2 style="padding: 20px;"><i class="fas fa-map-marker-alt"></i> Ubicación de la Escuela</h2>
+            </div>
+            <div class="custom-map">
+                <div class="map-placeholder">
+             
+                    <div class="location-info">
+                        <!-- <div class="map-icon">
+                            <i class="fas fa-map-marked-alt"></i>
+                        </div> -->
+                        <h3>Escuela de Educación Secundaria Técnica (E.E.S.T) Nº7 "Taller Regional Quilmes", IMPA</h3>
+                        <p><i class="fas fa-map-pin"></i> Quilmes, Buenos Aires, Argentina</p>
+                    </div>
+                </div>
+                <div class="map-iframe-container">
+                    <iframe 
+                        src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3278.874289025987!2d-58.2411887245151!3d-34.70627737284305!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95a32e326d6575cb%3A0xc67de7abd3a7def3!2sEscuela%20de%20Educaci%C3%B3n%20Secundaria%20T%C3%A9cnica%20(EEST)%20N%C2%BA7%20%22Taller%20Regional%20Quilmes%22%20IMPA!5e0!3m2!1ses!2sar!4v1726703946725!5m2!1ses!2sar"
+                        allowfullscreen="" 
+                        loading="lazy" 
+                        referrerpolicy="no-referrer-when-downgrade">
+                    </iframe>
+                </div>
+                <div class="map-cta">
+                    <a href="https://www.google.com/maps/place/Escuela+de+Educaci%C3%B3n+Secundaria+T%C3%A9cnica+(EEST)+N%C2%BA7+%22Taller+Regional+Quilmes%22+IMPA/@-34.706277,-58.239014,17z/data=!3m1!4b1!4m6!3m5!1s0x95a32e326d6575cb:0xc67de7abd3a7def3!8m2!3d-34.706277!4d-58.239014!16s%2Fg%2F1s04gg61k?entry=ttu" target="_blank" class="map-button">
+                        <i class="fas fa-external-link-alt"></i>
+                        Ver en Google Maps
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- <section class="contact-info">
+            <div class="container">
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-icon">
+                            <i class="fas fa-phone"></i>
+                        </div>
+                        <h3>Teléfono</h3>
+                        <div style="text-align: center;">+54 9 11 35852406</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-icon">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <h3>Email</h3>
+                        <div style="text-align: center;">projectaquiles@gmail.com</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-icon">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </div>
+                        <h3>Dirección</h3>
+                        <div style="text-align: center;">Escuela de Educación Secundaria Técnica (EEST) Nº7 "Taller Regional Quilmes" IMPA</div>
+                    </div>
+                </div>
+            </div>
+        </section> -->
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <div class="footer-logo">
+                        <img src="../med/1.PNG" alt="Proyecto Aquiles Logo">
+                        <span>Proyecto Aquiles</span>
+                    </div>
+                    
+                    <div class="eslogan">   
+                        <p>Revolucionando la movilidad humana</p>
+                    </div>
+                </div>
+    
+                <div class="footer-links">
+                    <h3>Accesos Rápidos</h3>
+                    <ul>
+                        <li><a href="../index.html">Inicio</a></li>
+                        <li><a href="acerca-de.html">Acerca de Nosotros</a></li>
+                        <li><a href="aquiles-a1.html">Aquiles A1</a></li>
+                        <li><a href="sponsors.html">Sponsors</a></li>
+                        <li><a href="reconocimientos.html">Trayectoria</a></li>
+                        <li><a href="galeria.html">Galería</a></li>
+                        <li><a href="contacto.html">Contacto</a></li>
+                    </ul>
+                </div>
+    
+                <div class="footer-contact">
+                    <h3>Contacto</h3>
+                    <ul>
+                        <li><i class="fas fa-map-marker-alt"></i>Escuela de Educación Secundaria Técnica (EEST) Nº7 "Taller Regional Quilmes" IMPA</li>
+                        <li><i class="fas fa-phone"></i> +54 9 11 3585 2406</li>
+                        <li><i class="fas fa-envelope"></i>projectaquiles@gmail.com</li>
+                    </ul>
+                </div>
+    
+                <div class="footer-social">
+                    <h3>Síguenos</h3>
+                    <div class="social-icons">
+                        <a href="https://www.instagram.com/aquiles.project/" target="_blank"><i class="fab fa-instagram"></i></a>
+                        <a href="https://www.linkedin.com/company/aquiles-project/about/"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="https://youtube.com/@aquilesproject?si=hjGjSXgWbFqAbJPA" target="_blank"><i class="fab fa-youtube"></i></a>
+                    </div>
+                </div>
+            </div>
+    
+            <div class="footer-bottom">
+                <p>&copy; <span id="current-year"></span> Proyecto Aquiles. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../script.js"></script>
+</body>
+</html>
