@@ -24,7 +24,16 @@ El sistema combina **electrónica de control avanzada**, **inteligencia artifici
 Incluye una **aplicación móvil y plataforma web** para el monitoreo, ajuste remoto y registro de datos clínicos en tiempo real.
 
 ---
+## 🎬 Video Presentación
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=tkjRqst9peo&t=31s" target="_blank" rel="noopener">
+    <img src="https://img.youtube.com/vi/tkjRqst9peo/hqdefault.jpg" alt="¿Qué es Aquiles? - Video" width="720" style="max-width:100%; height:auto; border-radius:8px;" />
+  </a>
+  <br/>
+  <em>Ver en YouTube</em>
+</p>
 
+---
 ## 🧠 Propósito e Impacto
 
 AQUILES busca democratizar el acceso a tecnologías de rehabilitación avanzadas y accesibles en Argentina y Latinoamérica.  
@@ -128,7 +137,7 @@ Desarrollada en **Flutter**, con base de datos en **Firebase Firestore**, integr
 ## 🙌 Agradecimientos
 
 A los profesores **Diego Palmieri**, **Fabrizio Carlassara**, **Sergio Medina**, **Federico Solomiewicz**, **Carlos Bianco** y **Julián Scicolone** por su guía constante.  
-Agradecemos también al **Centro Médico y de Rehabilitación del Sanatorio Modelo de Quilmes**, **Centro de Ojos Quilmes**, **Newton**, **Repuestos Santa Fe**, **La Amoladora Services**, y **Decomontaje** por su apoyo técnico y material.
+Agradecemos también al **Centro Médico y de Rehabilitación del Sanatorio Modelo de Quilmes**, **Centro de Ojos Quilmes**, **Newton**, **Repuestos Santa Fe**, **La Amoladora Services**, **Ir3d**, **Mr Service**, **ElectroStar**, y **Decomontaje** por su apoyo técnico y material.
 
 ---
 
