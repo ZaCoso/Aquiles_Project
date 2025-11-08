@@ -1,6 +1,7 @@
 #include "AppTasks.h"
 #include <cmath>
 #include <esp_timer.h>  // for esp_timer_get_time() on ESP32
+#include "esp32-hal-ledc.h"  // for LEDC APIs for buzzer
 
 const char Aquiles::DEVICE_NAME[] = "Aquiles X1";
 
@@ -299,17 +300,144 @@ namespace BLE {
     static   volatile bool mockEnabled     = true;   // demo mode for BLE without real data
     std::string   lastValue = "0";
 
-    // Buzzer pin (active buzzer on GPIO 11)
+    // Buzzer pin (passive buzzer on GPIO 11)
     static constexpr int PIN_BUZZER = 11;
+    static constexpr int LEDC_CHANNEL = 0;
+    static constexpr int LEDC_RES_BITS = 10;
+    static constexpr int LEDC_BASE_HZ = 2000;
+    
+    // Sound frequencies
+    static constexpr int FREQ_LOW = 1000;
+    static constexpr int FREQ_MID = 2000;
+    static constexpr int FREQ_HIGH = 3000;
+    static constexpr int FREQ_ERROR = 500;
+    
     static volatile bool g_buzzing = false;
 
-    // Small one-shot task to beep for 1 second without blocking BLE callback
-    static void vBuzzerBeep1s(void*){
-        digitalWrite(PIN_BUZZER, HIGH);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        digitalWrite(PIN_BUZZER, LOW);
+    // Generic beep function: plays a tone with given frequency and duration
+    struct BeepParams {
+        int freq;
+        int duration_ms;
+        int pause_ms;
+    };
+    
+    static void vBuzzerBeepTask(void* pvParams){
+        BeepParams* params = static_cast<BeepParams*>(pvParams);
+        ledcWriteTone(LEDC_CHANNEL, params->freq);
+        vTaskDelay(pdMS_TO_TICKS(params->duration_ms));
+        ledcWriteTone(LEDC_CHANNEL, 0);  // Stop tone
+        if (params->pause_ms > 0) {
+            vTaskDelay(pdMS_TO_TICKS(params->pause_ms));
+        }
+        delete params;  // Free allocated memory
         g_buzzing = false;
         vTaskDelete(nullptr);
+    }
+    
+    // Helper function to play a beep (non-blocking)
+    static void playBeep(int freq, int duration_ms, int pause_ms = 0) {
+        if (g_buzzing) return;  // Skip if already buzzing
+        
+        BeepParams* params = new BeepParams{freq, duration_ms, pause_ms};
+        g_buzzing = true;
+        BaseType_t result = xTaskCreatePinnedToCore(
+            vBuzzerBeepTask, "Buzz", 2048, params, 1, nullptr, 0
+        );
+        if (result != pdPASS) {
+            delete params;
+            g_buzzing = false;
+        }
+    }
+    
+    // Complex beep pattern structure
+    struct BeepPattern {
+        int* freqs;
+        int* durations;
+        int* pauses;
+        int count;
+    };
+    
+    static void vBuzzerPatternTask(void* pvParams){
+        BeepPattern* pattern = static_cast<BeepPattern*>(pvParams);
+        
+        for (int i = 0; i < pattern->count; i++) {
+            ledcWriteTone(LEDC_CHANNEL, pattern->freqs[i]);
+            vTaskDelay(pdMS_TO_TICKS(pattern->durations[i]));
+            ledcWriteTone(LEDC_CHANNEL, 0);
+            if (i < pattern->count - 1 && pattern->pauses[i] > 0) {
+                vTaskDelay(pdMS_TO_TICKS(pattern->pauses[i]));
+            }
+        }
+        
+        delete[] pattern->freqs;
+        delete[] pattern->durations;
+        delete[] pattern->pauses;
+        delete pattern;
+        g_buzzing = false;
+        vTaskDelete(nullptr);
+    }
+    
+    // Helper to play a pattern (non-blocking)
+    static void playPattern(int* freqs, int* durations, int* pauses, int count) {
+        if (g_buzzing) return;
+        
+        BeepPattern* pattern = new BeepPattern;
+        pattern->freqs = new int[count];
+        pattern->durations = new int[count];
+        pattern->pauses = new int[count];
+        pattern->count = count;
+        
+        for (int i = 0; i < count; i++) {
+            pattern->freqs[i] = freqs[i];
+            pattern->durations[i] = durations[i];
+            pattern->pauses[i] = pauses[i];
+        }
+        
+        g_buzzing = true;
+        BaseType_t result = xTaskCreatePinnedToCore(
+            vBuzzerPatternTask, "BuzzPat", 2048, pattern, 1, nullptr, 0
+        );
+        if (result != pdPASS) {
+            delete[] pattern->freqs;
+            delete[] pattern->durations;
+            delete[] pattern->pauses;
+            delete pattern;
+            g_buzzing = false;
+        }
+    }
+    
+    // Predefined sound patterns
+    static void playBeepShort() { playBeep(FREQ_MID, 100); }
+    static void playBeepLong() { playBeep(FREQ_MID, 500); }
+    static void playBeepDouble() {
+        int freqs[] = {FREQ_MID, FREQ_MID};
+        int durations[] = {100, 100};
+        int pauses[] = {50, 0};
+        playPattern(freqs, durations, pauses, 2);
+    }
+    static void playBeepTriple() {
+        int freqs[] = {FREQ_MID, FREQ_MID, FREQ_MID};
+        int durations[] = {80, 80, 80};
+        int pauses[] = {50, 50, 0};
+        playPattern(freqs, durations, pauses, 3);
+    }
+    static void playBeepSuccess() {
+        int freqs[] = {FREQ_LOW, FREQ_HIGH};
+        int durations[] = {100, 150};
+        int pauses[] = {0, 0};
+        playPattern(freqs, durations, pauses, 2);
+    }
+    static void playBeepError() {
+        playBeep(FREQ_ERROR, 300);
+    }
+    static void playBeepConnect() {
+        playBeep(FREQ_HIGH, 150);
+    }
+    static void playBeepDisconnect() {
+        int freqs[] = {FREQ_HIGH, FREQ_LOW};
+        int durations[] = {100, 200};
+        int pauses[] = {0, 0};
+        playPattern(freqs, durations, pauses, 2);
     }
 
     // Optional compact payloads (not used in string example)
@@ -336,21 +464,20 @@ namespace BLE {
             return;
         }
 
-        // beep non-blocking
-        if (!g_buzzing){
-            g_buzzing = true;
-            xTaskCreatePinnedToCore(vBuzzerBeep1s, "Buzz1s", 1024, nullptr, 1, nullptr, 0);
-        }
+        // Play short beep for any command received
+        playBeepShort();
 
         // Basic triggers
         if (s == "1" || s.equalsIgnoreCase("ON")) {
             streamEnabled = true;
             Serial.println("[ACTION] Streaming ENABLED");
+            playBeepSuccess();  // Success sound
             return;
         }
         if (s.equalsIgnoreCase("OFF")) {
             streamEnabled = false;
             Serial.println("[ACTION] Streaming DISABLED");
+            playBeepDouble();  // Double beep for OFF
             return;
         }
 
@@ -365,46 +492,58 @@ namespace BLE {
             if (cmd == "AID") {
                 settings.AID = clamp0100(val.toInt());
                 Serial.printf("[CMD] AID = %u (Assistance)\n", settings.AID);
+                playBeepShort();  // Short beep for setting change
             }
             else if (cmd == "RES") {
                 settings.RES = clamp0100(val.toInt());
                 Serial.printf("[CMD] RES = %u (Responsiveness)\n", settings.RES);
+                playBeepShort();  // Short beep for setting change
             }
             else if (cmd == "SEN") {
                 settings.SEN = clamp0100(val.toInt());
                 Serial.printf("[CMD] SEN = %u (Sensitivity)\n", settings.SEN);
+                playBeepShort();  // Short beep for setting change
             }
             else if (cmd == "SPD") {
                 Serial.printf("[CMD] SPD = %s (Mock speed)\n", val.c_str());
+                playBeepDouble();  // Double beep for speed
             }
             else if (cmd == "MODE") {
                 Serial.printf("[CMD] MODE = %s (Mock mode)\n", val.c_str());
+                playBeepTriple();  // Triple beep for mode change
             }
             else if (cmd == "CAL") {
                 Serial.println("[CMD] CAL request (Mock calibration)");
+                playBeepLong();  // Long beep for calibration
             }
             else if (cmd == "BAT") {
                 Serial.println("[CMD] BAT request (Mock battery)");
+                playBeepShort();  // Short beep for battery query
             }
             else if (cmd == "STA") {
                 Serial.println("[CMD] STA request (Mock status)");
+                playBeepShort();  // Short beep for status query
             }
             else if (cmd == "DEMO" || cmd == "MOCK") {
                 String vup = val; vup.toUpperCase();
                 if (vup == "ON" || vup == "1") { 
                     mockEnabled = true;  
                     Serial.println("[ACTION] DEMO MODE ON"); 
+                    playBeepSuccess();  // Success sound
                 }
                 else if (vup == "OFF" || vup == "0") { 
                     mockEnabled = false; 
                     Serial.println("[ACTION] DEMO MODE OFF"); 
+                    playBeepDouble();  // Double beep for OFF
                 }
                 else { 
                     Serial.printf("[CMD] DEMO expects ON/OFF, got '%s'\n", val.c_str()); 
+                    playBeepError();  // Error sound
                 }
             }
             else {
                 Serial.printf("[CMD] Unknown key '%s' with value '%s'\n", cmd.c_str(), val.c_str());
+                playBeepError();  // Error sound for unknown command
             }
             return;
         }
@@ -413,23 +552,30 @@ namespace BLE {
         String up = s; up.toUpperCase();
         if (up == "CAL" || up == "BAT" || up == "STA") {
             Serial.printf("[CMD] %s (mock single-word)\n", up.c_str());
+            if (up == "CAL") playBeepLong();  // Long beep for calibration
+            else playBeepShort();  // Short beep for queries
         } else if (up == "DEMO" || up == "MOCK") {
             mockEnabled = !mockEnabled;
             Serial.printf("[ACTION] DEMO toggled %s\n", mockEnabled?"ON":"OFF");
+            if (mockEnabled) playBeepSuccess();
+            else playBeepDouble();
         } else {
             Serial.printf("[CMD] Unrecognized single token: '%s'\n", s.c_str());
+            playBeepError();  // Error sound
         }
     }
 
     void MyServerCallbacks::onConnect(BLEServer* pServer) {
         deviceConnected = true;
         Serial.println("[BLE] Client connected");
+        playBeepConnect();  // Play connect sound
     }
 
     void MyServerCallbacks::onDisconnect(BLEServer* pServer) {
         deviceConnected = false;
         streamEnabled = false;
         Serial.println("[BLE] Client disconnected");
+        playBeepDisconnect();  // Play disconnect sound
         pServer->getAdvertising()->start();
     }
 
@@ -563,9 +709,11 @@ namespace BLE {
 
         Serial.println("[BLE] Advertising as 'Aquiles X1'");
 
-        // configure buzzer pin
-        pinMode(PIN_BUZZER, OUTPUT);
-        digitalWrite(PIN_BUZZER, LOW);
+        // configure buzzer pin (passive buzzer with LEDC)
+        ledcSetup(LEDC_CHANNEL, LEDC_BASE_HZ, LEDC_RES_BITS);
+        ledcAttachPin(PIN_BUZZER, LEDC_CHANNEL);
+        ledcWriteTone(LEDC_CHANNEL, 0);  // Start with buzzer off
+        Serial.printf("[BLE] Buzzer configured on pin %d (LEDC channel %d)\n", PIN_BUZZER, LEDC_CHANNEL);
 
         // create notify task
         xTaskCreatePinnedToCore(
