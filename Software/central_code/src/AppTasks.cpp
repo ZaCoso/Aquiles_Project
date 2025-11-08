@@ -324,12 +324,16 @@ namespace BLE {
 
     // called when phone writes to the command characteristic
     void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
-        std::string s = std::string(pCharacteristic->getValue().c_str());
+        String s = String(pCharacteristic->getValue().c_str());
+        s.trim();
+        
         // log raw
-        if (!s.empty()) {
+        if (s.length() > 0) {
             Serial.print("[BLE CMD RAW] ");
-            Serial.println(s.c_str());
-            lastValue = s;
+            Serial.println(s);
+            lastValue = std::string(s.c_str());
+        } else {
+            return;
         }
 
         // beep non-blocking
@@ -338,86 +342,78 @@ namespace BLE {
             xTaskCreatePinnedToCore(vBuzzerBeep1s, "Buzz1s", 1024, nullptr, 1, nullptr, 0);
         }
 
-        // trim spaces
-        auto trim = [](std::string& x){
-            size_t a = x.find_first_not_of(" \t\r\n");
-            size_t b = x.find_last_not_of(" \t\r\n");
-            if (a==std::string::npos){ x.clear(); return; }
-            x = x.substr(a, b-a+1);
-        };
-        trim(s);
-        if (s.empty()) return;
-
-        // handle ON/OFF
-        auto upper = [](std::string x){ for(char& c:x) c = (char)toupper((unsigned char)c); return x; };
-        std::string sup = upper(s);
-        if (sup=="1" || sup=="ON"){
+        // Basic triggers
+        if (s == "1" || s.equalsIgnoreCase("ON")) {
             streamEnabled = true;
             Serial.println("[ACTION] Streaming ENABLED");
             return;
         }
-        if (sup=="OFF"){
+        if (s.equalsIgnoreCase("OFF")) {
             streamEnabled = false;
             Serial.println("[ACTION] Streaming DISABLED");
             return;
         }
 
-        // parse KEY:VALUE
-        size_t colon = s.find(':');
-        if (colon != std::string::npos && colon>0){
-            std::string key = s.substr(0, colon);
-            std::string val = s.substr(colon+1);
-            trim(key); trim(val);
-            key = upper(key);
+        // Parse CMD:VALUE
+        int colon = s.indexOf(':');
+        if (colon > 0) {
+            String cmd = s.substring(0, colon); cmd.trim(); cmd.toUpperCase();
+            String val = s.substring(colon + 1); val.trim();
 
-            auto toInt = [](const std::string& v){
-                return atoi(v.c_str());
-            };
-            auto clamp0100 = [](int v){ return v<0?0:(v>100?100:v); };
+            auto clamp0100 = [](int v) { return v<0?0:(v>100?100:v); };
 
-            if (key=="AID"){
-                settings.AID = (uint8_t)clamp0100(toInt(val));
+            if (cmd == "AID") {
+                settings.AID = clamp0100(val.toInt());
                 Serial.printf("[CMD] AID = %u (Assistance)\n", settings.AID);
-                return;
-            } else if (key=="RES"){
-                settings.RES = (uint8_t)clamp0100(toInt(val));
-                Serial.printf("[CMD] RES = %u (Responsiveness)\n", settings.RES);
-                return;
-            } else if (key=="SEN"){
-                settings.SEN = (uint8_t)clamp0100(toInt(val));
-                Serial.printf("[CMD] SEN = %u (Sensitivity)\n", settings.SEN);
-                return;
-            } else if (key=="SPD"){
-                Serial.printf("[CMD] SPD = %s (Mock speed)\n", val.c_str());
-                return;
-            } else if (key=="MODE"){
-                Serial.printf("[CMD] MODE = %s (Mock mode)\n", val.c_str());
-                return;
-            } else if (key=="CAL"){
-                Serial.println("[CMD] CAL request (Mock calibration)");
-                return;
-            } else if (key=="BAT"){
-                Serial.println("[CMD] BAT request (Mock battery)");
-                return;
-            } else if (key=="STA"){
-                Serial.println("[CMD] STA request (Mock status)");
-                return;
-            } else if (key=="DEMO" || key=="MOCK"){
-                std::string vup = upper(val);
-                if (vup=="ON" || vup=="1") { mockEnabled = true;  Serial.println("[ACTION] DEMO MODE ON"); }
-                else if (vup=="OFF" || vup=="0") { mockEnabled = false; Serial.println("[ACTION] DEMO MODE OFF"); }
-                else { Serial.printf("[CMD] DEMO expects ON/OFF, got '%s'\n", val.c_str()); }
-                return;
-            } else {
-                Serial.printf("[CMD] Unknown key '%s' with value '%s'\n", key.c_str(), val.c_str());
-                return;
             }
+            else if (cmd == "RES") {
+                settings.RES = clamp0100(val.toInt());
+                Serial.printf("[CMD] RES = %u (Responsiveness)\n", settings.RES);
+            }
+            else if (cmd == "SEN") {
+                settings.SEN = clamp0100(val.toInt());
+                Serial.printf("[CMD] SEN = %u (Sensitivity)\n", settings.SEN);
+            }
+            else if (cmd == "SPD") {
+                Serial.printf("[CMD] SPD = %s (Mock speed)\n", val.c_str());
+            }
+            else if (cmd == "MODE") {
+                Serial.printf("[CMD] MODE = %s (Mock mode)\n", val.c_str());
+            }
+            else if (cmd == "CAL") {
+                Serial.println("[CMD] CAL request (Mock calibration)");
+            }
+            else if (cmd == "BAT") {
+                Serial.println("[CMD] BAT request (Mock battery)");
+            }
+            else if (cmd == "STA") {
+                Serial.println("[CMD] STA request (Mock status)");
+            }
+            else if (cmd == "DEMO" || cmd == "MOCK") {
+                String vup = val; vup.toUpperCase();
+                if (vup == "ON" || vup == "1") { 
+                    mockEnabled = true;  
+                    Serial.println("[ACTION] DEMO MODE ON"); 
+                }
+                else if (vup == "OFF" || vup == "0") { 
+                    mockEnabled = false; 
+                    Serial.println("[ACTION] DEMO MODE OFF"); 
+                }
+                else { 
+                    Serial.printf("[CMD] DEMO expects ON/OFF, got '%s'\n", val.c_str()); 
+                }
+            }
+            else {
+                Serial.printf("[CMD] Unknown key '%s' with value '%s'\n", cmd.c_str(), val.c_str());
+            }
+            return;
         }
 
-        // single-token commands (CAL/BAT/STA)
-        if (sup=="CAL" || sup=="BAT" || sup=="STA"){
-            Serial.printf("[CMD] %s (mock single-word)\n", sup.c_str());
-        } else if (sup=="DEMO" || sup=="MOCK"){
+        // Non-colon commands
+        String up = s; up.toUpperCase();
+        if (up == "CAL" || up == "BAT" || up == "STA") {
+            Serial.printf("[CMD] %s (mock single-word)\n", up.c_str());
+        } else if (up == "DEMO" || up == "MOCK") {
             mockEnabled = !mockEnabled;
             Serial.printf("[ACTION] DEMO toggled %s\n", mockEnabled?"ON":"OFF");
         } else {
@@ -425,35 +421,20 @@ namespace BLE {
         }
     }
 
-    void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
+    void MyServerCallbacks::onConnect(BLEServer* pServer) {
         deviceConnected = true;
-        Serial.println("BLE: device connected");
+        Serial.println("[BLE] Client connected");
     }
 
-    void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
+    void MyServerCallbacks::onDisconnect(BLEServer* pServer) {
         deviceConnected = false;
-        Serial.println("BLE: device disconnected");
-    }
-
-    // creates a characteristic with READ + NOTIFY (+ WRITE if needed)
-    static BLECharacteristic* mkChr(BLEService* svc, const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
-        uint32_t props = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY;
-        if (writable) props |= BLECharacteristic::PROPERTY_WRITE;
-
-        BLECharacteristic* ch = svc->createCharacteristic(uuid, props);
-
-        // add CCCD so iOS/Android can enable notifications
-        auto* cccd = new BLE2902();
-        cccd->setNotifications(true);
-        ch->addDescriptor(cccd);
-
-        if (cbs) ch->setCallbacks(cbs);
-        return ch;
+        streamEnabled = false;
+        Serial.println("[BLE] Client disconnected");
+        pServer->getAdvertising()->start();
     }
 
     // periodic notify task (20 Hz)
     void TaskNotify(void*) {
-        BLEDevice::setMTU(185);                // allow big-ish payloads
         const TickType_t period = pdMS_TO_TICKS(50);
         static float tphase = 0.0f;            // used in mock mode
         for(;;){
@@ -538,8 +519,11 @@ namespace BLE {
 
     // full BLE init: server, service, characteristics, advertising, notify task
     void init() {
+        Serial.println("\n[Aquiles x1] ESP32 BLE Arduino – Verbose Command Logging");
+
         // start BLE with device name
         BLEDevice::init(DEVICE_NAME);
+        BLEDevice::setMTU(185);
 
         // create server and set callbacks
         BLEServer* pServer = BLEDevice::createServer();
@@ -548,37 +532,40 @@ namespace BLE {
         // create service
         BLEService* pService = pServer->createService(SERVICE_UUID);
 
-        // create all characteristics we want
-        chIMU_L = mkChr(pService, CHR_IMU_L_UUID);
-        chIMU_R = mkChr(pService, CHR_IMU_R_UUID);
-        chENC_L = mkChr(pService, CHR_ENC_L_UUID);
-        chENC_R = mkChr(pService, CHR_ENC_R_UUID);
-        chF_3   = mkChr(pService, CHR_F_3_UUID);
-        // Dedicated command characteristic (write-only)
-        chCMD   = mkChr(pService, CHR_CMD_UUID, true, new MyCallbacks());
+        // create command characteristic (write-only)
+        chCMD = pService->createCharacteristic(CHR_CMD_UUID, BLECharacteristic::PROPERTY_WRITE);
+        chCMD->setCallbacks(new MyCallbacks());
 
-        // set initial values (zeros)
-        {
-            IMU6F  z6{}; ONEF z1{}; THREEF z3{};
-            if (chIMU_L) chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
-            if (chIMU_R) chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
-            if (chENC_L) chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
-            if (chENC_R) chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
-            if (chF_3)   chF_3  ->setValue((uint8_t*)&z3, sizeof(z3));
-        }
+        // create data characteristics (notify-only)
+        chIMU_L = pService->createCharacteristic(CHR_IMU_L_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chIMU_R = pService->createCharacteristic(CHR_IMU_R_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chENC_L = pService->createCharacteristic(CHR_ENC_L_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chENC_R = pService->createCharacteristic(CHR_ENC_R_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chF_3   = pService->createCharacteristic(CHR_F_3_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+
+        // add BLE2902 descriptor to all notify characteristics
+        chIMU_L->addDescriptor(new BLE2902());
+        chIMU_R->addDescriptor(new BLE2902());
+        chENC_L->addDescriptor(new BLE2902());
+        chENC_R->addDescriptor(new BLE2902());
+        chF_3->addDescriptor(new BLE2902());
+
+        // start service
+        pService->start();
+
+        // configure advertising
+        BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
+        pAdvertising->addServiceUUID(SERVICE_UUID);
+        pAdvertising->setScanResponse(true);
+        pAdvertising->setMinPreferred(0x06);
+        pAdvertising->setMinPreferred(0x12);
+        pAdvertising->start();
+
+        Serial.println("[BLE] Advertising as 'Aquiles X1'");
 
         // configure buzzer pin
         pinMode(PIN_BUZZER, OUTPUT);
         digitalWrite(PIN_BUZZER, LOW);
-
-        // start service & advertising
-        pService->start();
-        BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
-        pAdvertising->addServiceUUID(SERVICE_UUID);
-        pAdvertising->setScanResponse(true);
-        pAdvertising->start();
-
-        Serial.println("[BLE] Service started & advertising");
 
         // create notify task
         xTaskCreatePinnedToCore(
