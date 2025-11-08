@@ -292,9 +292,25 @@ namespace BLE {
     BLECharacteristic* chENC_L = nullptr;
     BLECharacteristic* chENC_R = nullptr;
     BLECharacteristic* chF_3   = nullptr;
+    BLECharacteristic* chCMD   = nullptr;
 
     volatile bool deviceConnected = false;
+    volatile bool streamEnabled   = false;
+    static   volatile bool mockEnabled     = true;   // demo mode for BLE without real data
     std::string   lastValue = "0";
+
+    // Buzzer pin (active buzzer on GPIO 11)
+    static constexpr int PIN_BUZZER = 11;
+    static volatile bool g_buzzing = false;
+
+    // Small one-shot task to beep for 1 second without blocking BLE callback
+    static void vBuzzerBeep1s(void*){
+        digitalWrite(PIN_BUZZER, HIGH);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        digitalWrite(PIN_BUZZER, LOW);
+        g_buzzing = false;
+        vTaskDelete(nullptr);
+    }
 
     // Optional compact payloads (not used in string example)
     #pragma pack(push,1)
@@ -303,104 +319,199 @@ namespace BLE {
     struct THREEF { float a, b, c; };
     #pragma pack(pop)
 
-    // called when phone writes to a characteristic
-    void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
-        std::string value = std::string(pCharacteristic->getValue().c_str());
-        if (!value.empty()) {
-            Serial.print("BLE RX: ");
-            Serial.println(value.c_str());
-            lastValue = value;
+    // simple settings (mirrors mock sketch keys)
+    struct Settings { uint8_t AID=50, RES=50, SEN=50; } settings;
 
-            // Process commands
-            if (value == "log_on" || value == "LOG_ON") {
-                Aquiles::Detection::enableLogging(true);
-            } else if (value == "log_off" || value == "LOG_OFF") {
-                Aquiles::Detection::enableLogging(false);
-            } else if (value == "log_toggle" || value == "LOG_TOGGLE") {
-                Aquiles::Detection::enableLogging(!Aquiles::Detection::isLoggingEnabled());
+    // called when phone writes to the command characteristic
+    void MyCallbacks::onWrite(BLECharacteristic* pCharacteristic) {
+        String s = String(pCharacteristic->getValue().c_str());
+        s.trim();
+        
+        // log raw
+        if (s.length() > 0) {
+            Serial.print("[BLE CMD RAW] ");
+            Serial.println(s);
+            lastValue = std::string(s.c_str());
+        } else {
+            return;
+        }
+
+        // beep non-blocking
+        if (!g_buzzing){
+            g_buzzing = true;
+            xTaskCreatePinnedToCore(vBuzzerBeep1s, "Buzz1s", 1024, nullptr, 1, nullptr, 0);
+        }
+
+        // Basic triggers
+        if (s == "1" || s.equalsIgnoreCase("ON")) {
+            streamEnabled = true;
+            Serial.println("[ACTION] Streaming ENABLED");
+            return;
+        }
+        if (s.equalsIgnoreCase("OFF")) {
+            streamEnabled = false;
+            Serial.println("[ACTION] Streaming DISABLED");
+            return;
+        }
+
+        // Parse CMD:VALUE
+        int colon = s.indexOf(':');
+        if (colon > 0) {
+            String cmd = s.substring(0, colon); cmd.trim(); cmd.toUpperCase();
+            String val = s.substring(colon + 1); val.trim();
+
+            auto clamp0100 = [](int v) { return v<0?0:(v>100?100:v); };
+
+            if (cmd == "AID") {
+                settings.AID = clamp0100(val.toInt());
+                Serial.printf("[CMD] AID = %u (Assistance)\n", settings.AID);
             }
+            else if (cmd == "RES") {
+                settings.RES = clamp0100(val.toInt());
+                Serial.printf("[CMD] RES = %u (Responsiveness)\n", settings.RES);
+            }
+            else if (cmd == "SEN") {
+                settings.SEN = clamp0100(val.toInt());
+                Serial.printf("[CMD] SEN = %u (Sensitivity)\n", settings.SEN);
+            }
+            else if (cmd == "SPD") {
+                Serial.printf("[CMD] SPD = %s (Mock speed)\n", val.c_str());
+            }
+            else if (cmd == "MODE") {
+                Serial.printf("[CMD] MODE = %s (Mock mode)\n", val.c_str());
+            }
+            else if (cmd == "CAL") {
+                Serial.println("[CMD] CAL request (Mock calibration)");
+            }
+            else if (cmd == "BAT") {
+                Serial.println("[CMD] BAT request (Mock battery)");
+            }
+            else if (cmd == "STA") {
+                Serial.println("[CMD] STA request (Mock status)");
+            }
+            else if (cmd == "DEMO" || cmd == "MOCK") {
+                String vup = val; vup.toUpperCase();
+                if (vup == "ON" || vup == "1") { 
+                    mockEnabled = true;  
+                    Serial.println("[ACTION] DEMO MODE ON"); 
+                }
+                else if (vup == "OFF" || vup == "0") { 
+                    mockEnabled = false; 
+                    Serial.println("[ACTION] DEMO MODE OFF"); 
+                }
+                else { 
+                    Serial.printf("[CMD] DEMO expects ON/OFF, got '%s'\n", val.c_str()); 
+                }
+            }
+            else {
+                Serial.printf("[CMD] Unknown key '%s' with value '%s'\n", cmd.c_str(), val.c_str());
+            }
+            return;
+        }
+
+        // Non-colon commands
+        String up = s; up.toUpperCase();
+        if (up == "CAL" || up == "BAT" || up == "STA") {
+            Serial.printf("[CMD] %s (mock single-word)\n", up.c_str());
+        } else if (up == "DEMO" || up == "MOCK") {
+            mockEnabled = !mockEnabled;
+            Serial.printf("[ACTION] DEMO toggled %s\n", mockEnabled?"ON":"OFF");
+        } else {
+            Serial.printf("[CMD] Unrecognized single token: '%s'\n", s.c_str());
         }
     }
 
-    void MyServerCallbacks::onConnect(BLEServer* /*pServer*/) {
+    void MyServerCallbacks::onConnect(BLEServer* pServer) {
         deviceConnected = true;
-        Serial.println("BLE: device connected");
+        Serial.println("[BLE] Client connected");
     }
 
-    void MyServerCallbacks::onDisconnect(BLEServer* /*pServer*/) {
+    void MyServerCallbacks::onDisconnect(BLEServer* pServer) {
         deviceConnected = false;
-        Serial.println("BLE: device disconnected");
-    }
-
-    // creates a characteristic with READ + NOTIFY (+ WRITE if needed)
-    static BLECharacteristic* mkChr(BLEService* svc, const char* uuid, bool writable = false, BLECharacteristicCallbacks* cbs = nullptr) {
-        uint32_t props = BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY;
-        if (writable) props |= BLECharacteristic::PROPERTY_WRITE;
-
-        BLECharacteristic* ch = svc->createCharacteristic(uuid, props);
-
-        // add CCCD so iOS/Android can enable notifications
-        auto* cccd = new BLE2902();
-        cccd->setNotifications(true);
-        ch->addDescriptor(cccd);
-
-        if (cbs) ch->setCallbacks(cbs);
-        return ch;
+        streamEnabled = false;
+        Serial.println("[BLE] Client disconnected");
+        pServer->getAdvertising()->start();
     }
 
     // periodic notify task (20 Hz)
     void TaskNotify(void*) {
-        BLEDevice::setMTU(185);                // allow big-ish payloads
         const TickType_t period = pdMS_TO_TICKS(50);
+        static float tphase = 0.0f;            // used in mock mode
         for(;;){
-            if (deviceConnected) {
+            if (deviceConnected && streamEnabled) {
                 // pull signals from detection
                 const auto& SL = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::L);
                 const auto& SR = Aquiles::Detection::getSignals(Aquiles::Detection::Leg::R);
 
-                // encoder left
+                // encoder left (binary float)
                 if (chENC_L) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "EncL: %.2f rad", SL.theta);
-                    chENC_L->setValue(msg);
+                    float th = mockEnabled ? (45.0f * (float)M_PI/180.0f + 40.0f * (float)M_PI/180.0f * sinf(tphase + 0.2f)) : SL.theta;
+                    ONEF f{ th };
+                    chENC_L->setValue((uint8_t*)&f, sizeof(f));
                     chENC_L->notify();
                 }
 
-                // encoder right
+                // encoder right (binary float)
                 if (chENC_R) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "EncR: %.2f rad", SR.theta);
-                    chENC_R->setValue(msg);
+                    float th = mockEnabled ? (45.0f * (float)M_PI/180.0f + 40.0f * (float)M_PI/180.0f * sinf(tphase + 1.3f)) : SR.theta;
+                    ONEF f{ th };
+                    chENC_R->setValue((uint8_t*)&f, sizeof(f));
                     chENC_R->notify();
                 }
 
-                // IMU left (forward accel + omega)
+                // IMU left (6 floats). Populate available fields; rest zero
                 if (chIMU_L) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "IMUL: a=%.2fg w=%.2f", SL.a_fwd_g, SL.omega);
-                    chIMU_L->setValue(msg);
+                    IMU6F f{};
+                    if (mockEnabled){
+                        f.ax = 0.1f * sinf(tphase + 0.0f);
+                        f.ay = 0.2f * cosf(tphase * 0.8f + 0.0f);
+                        f.az = 1.00f + 0.02f * sinf(tphase * 0.4f + 0.0f);
+                        f.gx = 10.0f * sinf(tphase * 1.5f + 0.0f);
+                        f.gy = 12.0f * cosf(tphase * 1.2f + 0.0f);
+                        f.gz =  8.0f * sinf(tphase * 0.9f + 0.0f);
+                    } else {
+                        f.ax = SL.a_fwd_g;   // use g-units for now
+                        f.gx = SL.omega;     // rad/s from detection
+                    }
+                    chIMU_L->setValue((uint8_t*)&f, sizeof(f));
                     chIMU_L->notify();
                 }
 
-                // IMU right
+                // IMU right (6 floats)
                 if (chIMU_R) {
-                    char msg[32];
-                    snprintf(msg, sizeof(msg), "IMUR: a=%.2fg w=%.2f", SR.a_fwd_g, SR.omega);
-                    chIMU_R->setValue(msg);
+                    IMU6F f{};
+                    if (mockEnabled){
+                        f.ax = 0.1f * sinf(tphase + 1.1f);
+                        f.ay = 0.2f * cosf(tphase * 0.8f + 1.1f);
+                        f.az = 1.00f + 0.02f * sinf(tphase * 0.4f + 1.1f);
+                        f.gx = 10.0f * sinf(tphase * 1.5f + 1.1f);
+                        f.gy = 12.0f * cosf(tphase * 1.2f + 1.1f);
+                        f.gz =  8.0f * sinf(tphase * 0.9f + 1.1f);
+                    } else {
+                        f.ax = SR.a_fwd_g;
+                        f.gx = SR.omega;
+                    }
+                    chIMU_R->setValue((uint8_t*)&f, sizeof(f));
                     chIMU_R->notify();
                 }
 
-                // cell voltages
+                // Compact status / forces (3 floats). Keep battery-style for now
                 if (chF_3) {
-                    char msg[64];
-                    float c1 = Power::getCellV(0);
-                    float c2 = Power::getCellV(1);
-                    float c3 = Power::getCellV(2);
-                    float c4 = Power::getCellV(3);
-                    snprintf(msg, sizeof(msg), "C1=%.3fV C2=%.3fV C3=%.3fV C4=%.3fV\n", c1,c2,c3,c4);
-                    chF_3->setValue(msg);
+                    THREEF f3{};
+                    if (mockEnabled){
+                        f3.a =  5.0f + 2.5f * sinf(tphase * 0.7f);
+                        f3.b = -1.5f + 2.0f * cosf(tphase * 0.6f);
+                        f3.c = 12.0f + 3.0f * sinf(tphase * 0.5f);
+                    } else {
+                        f3.a = Power::getPackSOC();
+                        f3.b = Power::getPackSOCmin();
+                        f3.c = 1.0f;
+                    }
+                    chF_3->setValue((uint8_t*)&f3, sizeof(f3));
                     chF_3->notify();
                 }
+                // advance phase for mock
+                tphase += 0.02f;
             }
             vTaskDelay(period);
         }
@@ -408,8 +519,11 @@ namespace BLE {
 
     // full BLE init: server, service, characteristics, advertising, notify task
     void init() {
+        Serial.println("\n[Aquiles x1] ESP32 BLE Arduino – Verbose Command Logging");
+
         // start BLE with device name
         BLEDevice::init(DEVICE_NAME);
+        BLEDevice::setMTU(185);
 
         // create server and set callbacks
         BLEServer* pServer = BLEDevice::createServer();
@@ -418,31 +532,40 @@ namespace BLE {
         // create service
         BLEService* pService = pServer->createService(SERVICE_UUID);
 
-        // create all characteristics we want
-        chIMU_L = mkChr(pService, CHR_IMU_L_UUID);
-        chIMU_R = mkChr(pService, CHR_IMU_R_UUID);
-        chENC_L = mkChr(pService, CHR_ENC_L_UUID);
-        chENC_R = mkChr(pService, CHR_ENC_R_UUID);
-        chF_3   = mkChr(pService, CHR_F_3_UUID);
+        // create command characteristic (write-only)
+        chCMD = pService->createCharacteristic(CHR_CMD_UUID, BLECharacteristic::PROPERTY_WRITE);
+        chCMD->setCallbacks(new MyCallbacks());
 
-        // set initial values (zeros)
-        {
-            IMU6F  z6{}; ONEF z1{}; THREEF z3{};
-            if (chIMU_L) chIMU_L->setValue((uint8_t*)&z6, sizeof(z6));
-            if (chIMU_R) chIMU_R->setValue((uint8_t*)&z6, sizeof(z6));
-            if (chENC_L) chENC_L->setValue((uint8_t*)&z1, sizeof(z1));
-            if (chENC_R) chENC_R->setValue((uint8_t*)&z1, sizeof(z1));
-            if (chF_3)   chF_3  ->setValue((uint8_t*)&z3, sizeof(z3));
-        }
+        // create data characteristics (notify-only)
+        chIMU_L = pService->createCharacteristic(CHR_IMU_L_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chIMU_R = pService->createCharacteristic(CHR_IMU_R_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chENC_L = pService->createCharacteristic(CHR_ENC_L_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chENC_R = pService->createCharacteristic(CHR_ENC_R_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+        chF_3   = pService->createCharacteristic(CHR_F_3_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 
-        // start service & advertising
+        // add BLE2902 descriptor to all notify characteristics
+        chIMU_L->addDescriptor(new BLE2902());
+        chIMU_R->addDescriptor(new BLE2902());
+        chENC_L->addDescriptor(new BLE2902());
+        chENC_R->addDescriptor(new BLE2902());
+        chF_3->addDescriptor(new BLE2902());
+
+        // start service
         pService->start();
+
+        // configure advertising
         BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(SERVICE_UUID);
         pAdvertising->setScanResponse(true);
+        pAdvertising->setMinPreferred(0x06);
+        pAdvertising->setMinPreferred(0x12);
         pAdvertising->start();
 
-        Serial.println("[BLE] Service started & advertising");
+        Serial.println("[BLE] Advertising as 'Aquiles X1'");
+
+        // configure buzzer pin
+        pinMode(PIN_BUZZER, OUTPUT);
+        digitalWrite(PIN_BUZZER, LOW);
 
         // create notify task
         xTaskCreatePinnedToCore(
@@ -770,7 +893,6 @@ namespace Tasks {
     void Blink(void* /*params*/) {
         for(;;){
             digitalWrite(9, !digitalRead(9));
-            Serial.printf("Rk.Test1\r\n");
             vTaskDelay(pdMS_TO_TICKS(500));
         }
     }

@@ -25,6 +25,8 @@ namespace Aquiles {
 
     // Main BLE service for this device
     constexpr const char* SERVICE_UUID   = "6e400010-b5a3-f393-e0a9-e50e24dcca9e";
+    // Command channel (write-only) – matches app sketch
+    constexpr const char* CHR_CMD_UUID   = "6e400020-b5a3-f393-e0a9-e50e24dcca9e";
 
     // Characteristics (we use several small ones instead of a single big blob)
     constexpr const char* CHR_IMU_L_UUID = "6e400021-b5a3-f393-e0a9-e50e24dcca9e";
@@ -159,9 +161,12 @@ namespace Aquiles {
         extern BLECharacteristic* chENC_L;
         extern BLECharacteristic* chENC_R;
         extern BLECharacteristic* chF_3;
+        extern BLECharacteristic* chCMD;
 
         // Set when a phone is connected
         extern volatile bool      deviceConnected;
+        // Controls if telemetry notifications are sent (ON/OFF from app)
+        extern volatile bool      streamEnabled;
         // Last string received (for basic commands)
         extern std::string        lastValue;
 
