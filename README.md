@@ -1,7 +1,7 @@
 # 🦿 AQUILES - Exoesqueleto de Asistencia Motriz
 
 <div align="center">
-  <img src="web/med/4.png" alt="Logo Proyecto Aquiles" width="200"/>
+  <img src="pagina_web/med/4.png" alt="Logo Proyecto Aquiles" width="200"/>
   <h3>Revolucionando la movilidad humana</h3>
   <p>Exoesqueleto de asistencia motora con inteligencia artificial y control FOC</p>
 
