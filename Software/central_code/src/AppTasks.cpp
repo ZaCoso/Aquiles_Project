@@ -1,6 +1,7 @@
 #include "AppTasks.h"
 #include <cmath>
 #include <esp_timer.h>  // for esp_timer_get_time() on ESP32
+#include "esp32-hal-ledc.h"  // for LEDC APIs for buzzer
 
 const char Aquiles::DEVICE_NAME[] = "Aquiles X1";
 
@@ -299,15 +300,19 @@ namespace BLE {
     static   volatile bool mockEnabled     = true;   // demo mode for BLE without real data
     std::string   lastValue = "0";
 
-    // Buzzer pin (active buzzer on GPIO 11)
+    // Buzzer pin (passive buzzer on GPIO 11)
     static constexpr int PIN_BUZZER = 11;
+    static constexpr int LEDC_CHANNEL = 0;
+    static constexpr int LEDC_RES_BITS = 10;
+    static constexpr int LEDC_BASE_HZ = 2000;
+    static constexpr int BEEP_FREQ = 2000;  // Frequency for beep (Hz)
     static volatile bool g_buzzing = false;
 
     // Small one-shot task to beep for 1 second without blocking BLE callback
     static void vBuzzerBeep1s(void*){
-        digitalWrite(PIN_BUZZER, HIGH);
+        ledcWriteTone(LEDC_CHANNEL, BEEP_FREQ);
         vTaskDelay(pdMS_TO_TICKS(1000));
-        digitalWrite(PIN_BUZZER, LOW);
+        ledcWriteTone(LEDC_CHANNEL, 0);  // Stop tone
         g_buzzing = false;
         vTaskDelete(nullptr);
     }
@@ -563,9 +568,11 @@ namespace BLE {
 
         Serial.println("[BLE] Advertising as 'Aquiles X1'");
 
-        // configure buzzer pin
-        pinMode(PIN_BUZZER, OUTPUT);
-        digitalWrite(PIN_BUZZER, LOW);
+        // configure buzzer pin (passive buzzer with LEDC)
+        ledcSetup(LEDC_CHANNEL, LEDC_BASE_HZ, LEDC_RES_BITS);
+        ledcAttachPin(PIN_BUZZER, LEDC_CHANNEL);
+        ledcWriteTone(LEDC_CHANNEL, 0);  // Start with buzzer off
+        Serial.printf("[BLE] Buzzer configured on pin %d (LEDC channel %d)\n", PIN_BUZZER, LEDC_CHANNEL);
 
         // create notify task
         xTaskCreatePinnedToCore(
