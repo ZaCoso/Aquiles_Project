@@ -6,7 +6,7 @@
   <p>Exoesqueleto de asistencia motora con inteligencia artificial y control FOC</p>
 
   <p align="center">
-    <a href="https://aquilesproject.com/" target="_blank"><img src="https://img.icons8.com/ios-filled/50/8DD3D7/globe.png" width="28"/></a>&nbsp;
+    <a href="https://zacas-code.github.io/Host_Aquiles_Project/" target="_blank"><img src="https://img.icons8.com/ios-filled/50/8DD3D7/globe.png" width="28"/></a>&nbsp;
     <a href="https://www.instagram.com/aquiles.project/" target="_blank"><img src="https://img.icons8.com/ios-filled/50/8DD3D7/instagram-new.png" width="28"/></a>&nbsp;
     <a href="https://www.linkedin.com/company/aquiles-project/" target="_blank"><img src="https://img.icons8.com/ios-filled/50/8DD3D7/linkedin.png" width="28"/></a>&nbsp;
     <a href="https://youtube.com/@aquilesproject" target="_blank"><img src="https://img.icons8.com/ios-filled/50/8DD3D7/youtube.png" width="28"/></a>&nbsp;
@@ -62,7 +62,7 @@ Su impacto se extiende en tres ejes principales:
 - **Lenguajes:** C, C++, Dart, HTML, JS.  
 - **Firmware:** SimpleFOC, comunicación SPI entre ESP32-S3 y RP2040.  
 - **App móvil:** desarrollada en **Flutter + Firebase**, con UI intuitiva para monitoreo y ajustes.  
-- **Web:** [aquilesproject.com](https://aquilesproject.com) – presentación del ecosistema, galería, sponsors y contacto.
+- **Web:** [zacas-code.github.io/Host_Aquiles_Project](https://zacas-code.github.io/Host_Aquiles_Project/) – presentación del ecosistema, galería, sponsors y contacto.
 
 ---
 
